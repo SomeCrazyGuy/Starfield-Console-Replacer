@@ -8,6 +8,11 @@
 
 #include "hook_api.h"
 
+
+#define OUTPUT_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleOutput.txt"
+#define HISTORY_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleHistory.txt"
+
+
 struct Line {
         uint32_t start;
         uint32_t len;
@@ -24,7 +29,8 @@ static int CALLBACK_inputtext_switch_mode(ImGuiInputTextCallbackData* data);
 static void display_lines(const std::vector<Line>& lines, char* buffer);
 static const char* stristr(const char* haystack, const char* needle);
 
-
+static void(*OLD_ConsolePrintV)(void*, const char*, va_list) = nullptr;
+static const hook_api_t* HookAPI = nullptr;
 static constexpr auto NumberOfWordsInWarAndPeace = 587287;
 static constexpr auto AverageWordLengthCharacters = 5;
 static char OutputBuffer[NumberOfWordsInWarAndPeace * AverageWordLengthCharacters];             
@@ -45,7 +51,7 @@ static char SmallBuffer[4096];
 
 static void WriteOutput() {
         if (!OutputFile) {
-                fopen_s(&OutputFile, "ConsoleOutput.txt", "ab");
+                fopen_s(&OutputFile, OUTPUT_FILE_PATH, "ab");
                 assert(OutputFile != NULL);
         }
         const auto last = OutputLines.back();
@@ -55,7 +61,7 @@ static void WriteOutput() {
 }
 
 static void LoadHistory() {
-        fopen_s(&HistoryFile, "ConsoleHistory.txt", "ab+");
+        fopen_s(&HistoryFile, HISTORY_FILE_PATH, "ab+");
         assert(HistoryFile != NULL);
 
         fseek(HistoryFile, 0, SEEK_END);
@@ -85,10 +91,23 @@ static void WriteHistory() {
 }
 
 
+static void forward_to_old_consoleprint(void* consolemgr, const char* fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        OLD_ConsolePrintV(consolemgr, fmt, args);
+        va_end(args);
+}
+
+
 extern void console_print(void* consolemgr, const char* fmt, va_list args) {
         (void)consolemgr;
         auto size = vsnprintf(&OutputBuffer[OutputPos], sizeof(OutputBuffer) - OutputPos, fmt, args);
-        if (size <= 0) return;
+        if (size <= 0) {
+                return;
+        }
+        if (consolemgr) {
+                forward_to_old_consoleprint(consolemgr, "%s", &OutputBuffer[OutputPos]); //send it already converted
+        }
         OutputLines.push_back(Line{OutputPos, (uint32_t)size});
         OutputPos += size + 1; //keep the null terminator in the buffer
         UpdateScroll = 3;
@@ -98,7 +117,7 @@ extern void console_print(void* consolemgr, const char* fmt, va_list args) {
 static void console_run(char* cmd) {
         static void(*RunConsoleCommand)(void*, char*) = nullptr;
         if (!RunConsoleCommand) {
-                RunConsoleCommand = (decltype(RunConsoleCommand))GetHookAPI()->Relocate(OFFSET_console_run);
+                RunConsoleCommand = (decltype(RunConsoleCommand))HookAPI->Relocate(OFFSET_console_run);
         }
         RunConsoleCommand(NULL, cmd);
 }
@@ -124,6 +143,26 @@ extern void draw_console_window() {
         if (!HistoryFile) {
                 LoadHistory();
         }
+
+        if (!HookAPI) {
+                HookAPI = GetHookAPI();
+        }
+
+        if (!OLD_ConsolePrintV) {
+                OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV)) HookAPI->HookFunction(
+                        (FUNC_PTR)HookAPI->Relocate(OFFSET_console_vprint),
+                        (FUNC_PTR)console_print
+                );
+        }
+
+        static bool GameState = true;
+        static const char* GameStates[] = { "Paused", "Running" };
+        if (ImGui::Button(GameStates[GameState])) {
+                char tgp[] = "ToggleGamePause";
+                console_run(tgp);
+                GameState = !GameState;
+        }
+        ImGui::SameLine();
         
         ImGui::SetNextItemWidth(-(ImGui::GetFontSize() * 20));
         if (UpdateFocus) {

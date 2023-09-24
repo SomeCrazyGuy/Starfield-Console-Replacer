@@ -10,6 +10,7 @@
 #include "console.h"
 #include "hook_api.h"
 #include "simpledraw.h"
+#include "configfile.h"
 
 
 extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
@@ -40,6 +41,10 @@ static bool should_show_ui = false;
 static HWND window_handle = nullptr;
 
 
+static int ConsoleHotkey = VK_F1;
+static int FontScalePercent = 100;
+
+
 static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
         auto ret = OLD_CreateCommandQueue(This, pDesc, riid, ppCommandQueue);
         if(!d3d12CommandQueue) d3d12CommandQueue = *(ID3D12CommandQueue**)ppCommandQueue;
@@ -49,6 +54,11 @@ static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
         if (OLD_Present) return;
+
+        ReadConfigFile();
+        CONFIG_INT(ConsoleHotkey);
+        CONFIG_INT(FontScalePercent);
+        SaveConfigFile();
 
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;
@@ -176,9 +186,6 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 
         ::DestroyWindow(hwnd);
         ::UnregisterClassA(wc.lpszClassName, wc.hInstance);
-
-        //now with that out of the way, time to hook the console I/O functions
-        API.Hook->HookFunction((FUNC_PTR)API.Hook->Relocate(OFFSET_console_vprint), (FUNC_PTR)console_print);
         
         // the game uses the rawinput interface to read keyboard and mouse events
         // if we hook that function we can disable input to the game when the imgui interface is open
@@ -322,6 +329,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 }
 
                 ImGui::Begin("BetterConsole");
+                ImGui::SetWindowFontScale(FontScalePercent / 100.f);
                 ImGui::BeginTabBar("tab items");
                 if (ImGui::BeginTabItem("Console")) {
                         draw_console_window();
@@ -372,7 +380,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
 
 static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-        if ((wParam == VK_F1) && (uMsg == WM_KEYDOWN)) {
+        if ((wParam == ConsoleHotkey) && (uMsg == WM_KEYDOWN)) {
                 should_show_ui = !should_show_ui;
         }
         if (should_show_ui) {

@@ -13,6 +13,30 @@
 /* TODO List:
         -dynamic arrays for buffers
         -documentation
+
+        nexusmods todo list:
+        ====================
+        Easy - option to pass through input to game while console is open
+
+        Easy - allow >1 lines to be pasted into the command input (like paste a whole bat file)
+
+        Medium - get/set selected ref
+
+        Medium - get the ref of the object you are looking at
+
+        Medium - once selected ref is working, add get base id
+
+        Unknown - 1 report of incompatibility with reactor count mod
+
+        Unknown - Game crashes at startup for some users (might be dlss mod related?)
+
+        Unknown - Game crashes when F1 is pressed for some users (might be dlss mod related?)
+
+        Unknown - puredark dlss is not compatible, but only for reading keyboard and mouse input
+
+        Unknown - "Streamline Native (Frame Gen - DLSS - Reflex Integration)" causes crash on F1
+
+        Unknown - "Starfield Frame Generation - Replacing FSR2 with DLSS-G" causes instant CTD
 */
 
 
