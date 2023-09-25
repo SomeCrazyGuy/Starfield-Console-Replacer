@@ -117,7 +117,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         static ID3D12CommandQueue* g_pd3dCommandQueue = NULL;
 
         // Create device
-        D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_12_1;
+        D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_12_0;
         ASSERT(D3D12CreateDevice(NULL, featureLevel, IID_PPV_ARGS(&g_pd3dDevice)) == S_OK);
         
         IDXGIFactory4* dxgiFactory = NULL;

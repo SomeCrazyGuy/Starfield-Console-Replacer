@@ -13,7 +13,6 @@
 #include <cstdio>
 
 /* TODO List:
-        -dynamic arrays for buffers
         -documentation
 
         nexusmods todo list:
