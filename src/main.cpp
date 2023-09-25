@@ -25,7 +25,7 @@ extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
         0, 0 //reserved fields
 };
 
-#define FATAL_ERROR(X) do{MessageBoxA(NULL, X, "Debug", 0); ExitProcess(1);}while(0)
+//#define FATAL_ERROR(X) do{MessageBoxA(NULL, X, "Debug", 0); ExitProcess(1);}while(0)
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT PresentFlags);
@@ -47,13 +47,18 @@ static int FontScalePercent = 100;
 
 static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
         auto ret = OLD_CreateCommandQueue(This, pDesc, riid, ppCommandQueue);
+        static unsigned ccc = 0;
+        ++ccc;
+        char buff[128];
+        snprintf(buff, 128, "FAKE_CreateCommandQueue: %u, queue: %p", ccc, *(ID3D12CommandQueue**)ppCommandQueue);
+        //MessageBoxA(NULL, buff, "Debug", 0);
         if(!d3d12CommandQueue) d3d12CommandQueue = *(ID3D12CommandQueue**)ppCommandQueue;
         return ret;
 }
 
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
-        if (OLD_Present) return;
+        ASSERT(OLD_Present == NULL);
 
         ReadConfigFile();
         CONFIG_INT(ConsoleHotkey);
@@ -113,22 +118,16 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 
         // Create device
         D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_12_1;
-        if (D3D12CreateDevice(NULL, featureLevel, IID_PPV_ARGS(&g_pd3dDevice)) != S_OK) {
-                FATAL_ERROR("D3D12CreateDevice");
-        }
+        ASSERT(D3D12CreateDevice(NULL, featureLevel, IID_PPV_ARGS(&g_pd3dDevice)) == S_OK);
         
         IDXGIFactory4* dxgiFactory = NULL;
-        if (CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory)) != S_OK) {
-                FATAL_ERROR("CreateDXGIFactory1");
-        }
+        ASSERT(CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory)) == S_OK);
 
         D3D12_COMMAND_QUEUE_DESC desc = {};
         desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
         desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
         desc.NodeMask = 1;
-        if (g_pd3dDevice->CreateCommandQueue(&desc, IID_PPV_ARGS(&g_pd3dCommandQueue)) != S_OK) {
-                FATAL_ERROR("CreateCommandQueue");
-        }
+        ASSERT(g_pd3dDevice->CreateCommandQueue(&desc, IID_PPV_ARGS(&g_pd3dCommandQueue)) == S_OK);
 
         //hack commandqueue vtable
         enum class DeviceFunctionIndex : unsigned {
@@ -151,13 +150,9 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                 );
 
         IDXGISwapChain1* swapChain1 = NULL;
-        if (dxgiFactory->CreateSwapChainForHwnd(g_pd3dCommandQueue, hwnd, &sd, NULL, NULL, &swapChain1) != S_OK) {
-                FATAL_ERROR("CreateSwapChainForHwnd");
-        }
+        ASSERT(dxgiFactory->CreateSwapChainForHwnd(g_pd3dCommandQueue, hwnd, &sd, NULL, NULL, &swapChain1) == S_OK);
+        ASSERT(swapChain1->QueryInterface(IID_PPV_ARGS(&g_pSwapChain)) == S_OK);
 
-        if (swapChain1->QueryInterface(IID_PPV_ARGS(&g_pSwapChain)) != S_OK) {
-                FATAL_ERROR("QueryInterface");
-        }
         swapChain1->Release();
         dxgiFactory->Release();
 
@@ -190,7 +185,8 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         // the game uses the rawinput interface to read keyboard and mouse events
         // if we hook that function we can disable input to the game when the imgui interface is open
         auto huser32 = GetModuleHandleA("user32");
-        assert(huser32 != NULL);
+        ASSERT(huser32 != NULL);
+
         auto fun_get_rawinput = (FUNC_PTR) GetProcAddress(huser32, "GetRawInputData");
         static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = nullptr;
         static decltype(OLD_GetRawInputData) FAKE_GetRawInputData = [](HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) -> UINT {
@@ -355,14 +351,10 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
                 barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 
-                //FATAL_ERROR("HERERERER");
-
                 d3d12CommandList->Reset(currentFrameContext.commandAllocator, nullptr);
                 d3d12CommandList->ResourceBarrier(1, &barrier);
                 d3d12CommandList->OMSetRenderTargets(1, &currentFrameContext.main_render_target_descriptor, FALSE, nullptr);
                 d3d12CommandList->SetDescriptorHeaps(1, &d3d12DescriptorHeapImGuiRender);
-
-                //FATAL_ERROR("HERERERER");
 
                 ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), d3d12CommandList);
 

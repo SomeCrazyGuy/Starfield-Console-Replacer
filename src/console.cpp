@@ -7,16 +7,12 @@
 #include <string>
 
 #include "hook_api.h"
+#include "log_buffer.h"
 
 
 #define OUTPUT_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleOutput.txt"
 #define HISTORY_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleHistory.txt"
 
-
-struct Line {
-        uint32_t start;
-        uint32_t len;
-};
 
 enum class InputMode : uint32_t {
         Command,
@@ -26,72 +22,68 @@ enum class InputMode : uint32_t {
 
 static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data);
 static int CALLBACK_inputtext_switch_mode(ImGuiInputTextCallbackData* data);
-static void display_lines(const std::vector<Line>& lines, char* buffer);
-static const char* stristr(const char* haystack, const char* needle);
+static void display_search_lines(LogBufferHandle handle, const std::vector<uint32_t>& lines);
+static void display_lines(LogBufferHandle handle);
+static bool strcasestr(const char* haystack, const char* needle);
 
-static void(*OLD_ConsolePrintV)(void*, const char*, va_list) = nullptr;
-static const hook_api_t* HookAPI = nullptr;
-static constexpr auto NumberOfWordsInWarAndPeace = 587287;
-static constexpr auto AverageWordLengthCharacters = 5;
-static char OutputBuffer[NumberOfWordsInWarAndPeace * AverageWordLengthCharacters];             
-static char InputBuffer[512 * 1024];
-static uint32_t OutputPos = 0;
-static uint32_t InputPos = 0;
+static void(*OLD_ConsolePrintV)(void*, const char*, va_list) = nullptr;          
 static int UpdateScroll = 0;
 static bool UpdateFocus = true;
-static std::vector<Line> OutputLines{};
-static std::vector<Line> InputLines{};
-static std::vector<Line> SearchOutputLines{};
-static std::vector<Line> SearchHistoryLines{};
 static int HistoryIndex = -1;
+static InputMode CommandMode = InputMode::Command;
+
+
+static const hook_api_t* HookAPI = nullptr;
+static const log_buffer_api_t* LogBuffer = nullptr;
+static char IOBuffer[256 * 1024];
+static LogBufferHandle OutputHandle;
+static LogBufferHandle HistoryHandle;
 static FILE* OutputFile = nullptr;
 static FILE* HistoryFile = nullptr;
-static InputMode CommandMode = InputMode::Command;
-static char SmallBuffer[4096];
+static std::vector<uint32_t> SearchOutputLines{};
+static std::vector<uint32_t> SearchHistoryLines{};
 
-static void WriteOutput() {
-        if (!OutputFile) {
-                fopen_s(&OutputFile, OUTPUT_FILE_PATH, "ab");
-                assert(OutputFile != NULL);
-        }
-        const auto last = OutputLines.back();
-        const char* buff = &OutputBuffer[last.start];
-        fwrite(buff, 1, strlen(buff), OutputFile);
-        fputc('\n', OutputFile);
-}
 
-static void LoadHistory() {
+static void init_console() {
+        static bool init = false;
+        if (init) return; else init = true;
+
+        HookAPI = GetHookAPI();
+        LogBuffer = GetLogBufferAPI();
+        OutputHandle = LogBuffer->Create("Console Output");
+        HistoryHandle = LogBuffer->Create("Command History");
+
+        OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
+                (FUNC_PTR)HookAPI->Relocate(OFFSET_console_vprint),
+                (FUNC_PTR)console_print
+        );
+
+        fopen_s(&OutputFile, OUTPUT_FILE_PATH, "ab");
+        ASSERT(OutputFile != NULL);
+
         fopen_s(&HistoryFile, HISTORY_FILE_PATH, "ab+");
-        assert(HistoryFile != NULL);
+        ASSERT(HistoryFile != NULL);
 
-        fseek(HistoryFile, 0, SEEK_END);
-        uint32_t len = ftell(HistoryFile);
-        assert(len < sizeof(InputBuffer));
+        //load history file from last session
         fseek(HistoryFile, 0, SEEK_SET);
-        fread(InputBuffer, 1, len, HistoryFile);
-
-        Line line;
-        line.start = InputPos;
-        for (InputPos = 0; InputPos < len; ++InputPos) {
-                if (InputBuffer[InputPos] == '\n') {
-                        line.len = InputPos - line.start;
-                        InputBuffer[InputPos] = '\0';
-                        InputLines.push_back(line);
-                        line.start = InputPos + 1;
+        while (fgets(IOBuffer, sizeof(IOBuffer), HistoryFile)) {
+                for (uint32_t i = 0; i < sizeof(IOBuffer); ++i) {
+                        if (!IOBuffer[i]) break;
+                        if (IOBuffer[i] == '\n') {
+                                IOBuffer[i] = '\0';
+                                LogBuffer->Append(HistoryHandle, IOBuffer);
+                                break;
+                        }
                 }
         }
-        InputBuffer[InputPos++] = '\0';
-}
+        HistoryIndex = LogBuffer->GetLineCount(HistoryHandle);
 
-static void WriteHistory() {
-        const auto last = InputLines.back();
-        const char* buff = &InputBuffer[last.start];
-        fwrite(buff, 1, strlen(buff), HistoryFile);
-        fputc('\n', HistoryFile);
+        IOBuffer[0] = 0;
 }
 
 
 static void forward_to_old_consoleprint(void* consolemgr, const char* fmt, ...) {
+        if (!consolemgr) return;
         va_list args;
         va_start(args, fmt);
         OLD_ConsolePrintV(consolemgr, fmt, args);
@@ -100,19 +92,17 @@ static void forward_to_old_consoleprint(void* consolemgr, const char* fmt, ...) 
 
 
 extern void console_print(void* consolemgr, const char* fmt, va_list args) {
-        (void)consolemgr;
-        auto size = vsnprintf(&OutputBuffer[OutputPos], sizeof(OutputBuffer) - OutputPos, fmt, args);
-        if (size <= 0) {
-                return;
-        }
-        if (consolemgr) {
-                forward_to_old_consoleprint(consolemgr, "%s", &OutputBuffer[OutputPos]); //send it already converted
-        }
-        OutputLines.push_back(Line{OutputPos, (uint32_t)size});
-        OutputPos += size + 1; //keep the null terminator in the buffer
+        auto size = vsnprintf(IOBuffer, sizeof(IOBuffer), fmt, args);
+        if (size <= 0) return;
+        if (!LogBuffer) init_console();
+        forward_to_old_consoleprint(consolemgr, "%s", IOBuffer); //send it already converted
+        fputs(IOBuffer, OutputFile);
+        fputc('\n', OutputFile);
+        LogBuffer->Append(OutputHandle, IOBuffer);
+        IOBuffer[0] = 0;
         UpdateScroll = 3;
-        WriteOutput();
 }
+
 
 static void console_run(char* cmd) {
         static void(*RunConsoleCommand)(void*, char*) = nullptr;
@@ -140,20 +130,7 @@ extern const struct log_api_t* GetLogAPI() {
 }
 
 extern void draw_console_window() {
-        if (!HistoryFile) {
-                LoadHistory();
-        }
-
-        if (!HookAPI) {
-                HookAPI = GetHookAPI();
-        }
-
-        if (!OLD_ConsolePrintV) {
-                OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV)) HookAPI->HookFunction(
-                        (FUNC_PTR)HookAPI->Relocate(OFFSET_console_vprint),
-                        (FUNC_PTR)console_print
-                );
-        }
+        if (!LogBuffer) init_console();
 
         static bool GameState = true;
         static const char* GameStates[] = { "Paused", "Running" };
@@ -169,76 +146,68 @@ extern void draw_console_window() {
                 ImGui::SetKeyboardFocusHere();
                 UpdateFocus = false;
         }
-        char* input = &InputBuffer[InputPos];
+
         if (CommandMode == InputMode::Command) {
-                if (ImGui::InputText("Command Mode", input, sizeof(InputBuffer) - InputPos, ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_cmdline)) {
-                        HistoryIndex = -1;
-                        auto len = (uint32_t) strlen(input);
-                        InputLines.push_back(Line{ InputPos, (uint32_t)len });
-                        InputPos += len + 1;
-                        InputBuffer[InputPos] = '\0';
-                        console_run(input);
-                        WriteHistory();
+                if (ImGui::InputText("Command Mode", IOBuffer, sizeof(IOBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_cmdline)) {
+                        HistoryIndex = LogBuffer->GetLineCount(HistoryHandle);
+                        fputs(IOBuffer, HistoryFile);
+                        fputc('\n', HistoryFile);
+                        console_run(IOBuffer);
+                        IOBuffer[0] = 0;
                         fflush(OutputFile);
                         fflush(HistoryFile);
                         UpdateFocus = true;
                 }
-                display_lines(OutputLines, OutputBuffer);
+                display_lines(OutputHandle);
         }
         else if (CommandMode == InputMode::SearchOutput) {
-                if (ImGui::InputText("Search Output", SmallBuffer, sizeof(SmallBuffer), ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_switch_mode)) {
+                if (ImGui::InputText("Search Output", IOBuffer, sizeof(IOBuffer), ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_switch_mode)) {
                         SearchOutputLines.clear();
-                        for (auto x : OutputLines) {
-                                if (stristr(&OutputBuffer[x.start], SmallBuffer)) {
-                                        SearchOutputLines.push_back(x);
+                        for (uint32_t i = 0; i < LogBuffer->GetLineCount(OutputHandle); ++i) {
+                                if (strcasestr(LogBuffer->GetLine(OutputHandle, i), IOBuffer)) {
+                                        SearchOutputLines.push_back(i);
                                 }
                         }
                 }
-                display_lines(SearchOutputLines, OutputBuffer);
+                display_search_lines(OutputHandle, SearchOutputLines);
         }
         else if (CommandMode == InputMode::SearchHistory) {
-                if (ImGui::InputText("Search History", SmallBuffer, sizeof(SmallBuffer), ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_switch_mode)) {
+                if (ImGui::InputText("Search History", IOBuffer, sizeof(IOBuffer), ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_switch_mode)) {
                         SearchHistoryLines.clear();
-                        for (auto x : InputLines) {
-                                if (stristr(&InputBuffer[x.start], SmallBuffer)) {
-                                        SearchHistoryLines.push_back(x);
+                        for (uint32_t i = 0; i < LogBuffer->GetLineCount(HistoryHandle); ++i) {
+                                if (strcasestr(LogBuffer->GetLine(HistoryHandle, i), IOBuffer)) {
+                                        SearchHistoryLines.push_back(i);
                                 }
                         }
                 }
-                display_lines(SearchHistoryLines, InputBuffer);
+                display_search_lines(HistoryHandle, SearchHistoryLines);
         }
 }
 
 
 static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data) {
-        
         if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {
+                const auto HistoryMax = LogBuffer->GetLineCount(HistoryHandle);
+
                 if (data->EventKey == ImGuiKey_UpArrow) {
-                        if (HistoryIndex < 0) {
-                                //we are on the bottom line and the user pressed up
-                                //TODO: snapshot the current linebuffer when going up in history for the first time
-                                HistoryIndex = (int) InputLines.size() - 1;
-                        }
-                        else if (HistoryIndex > 0) {
-                                --HistoryIndex;
-                        }
+                        --HistoryIndex;
                 }
                 else if (data->EventKey == ImGuiKey_DownArrow) {
-                        if (HistoryIndex < 0) {
-                                return 0;
-                        }
-
-                        if(HistoryIndex < InputLines.size())
-                                ++HistoryIndex;
+                        ++HistoryIndex;
                 }
 
-                if (HistoryIndex >= InputLines.size()) {
-                        HistoryIndex = (int) InputLines.size() - 1;
+                if (HistoryIndex < 0) {
+                        HistoryIndex = 0;
                 }
-                
-                const auto line = InputLines[HistoryIndex];
-                data->DeleteChars(0, data->BufTextLen);
-                data->InsertChars(0, &InputBuffer[line.start]);
+
+                if (HistoryIndex >= HistoryMax) {
+                        HistoryIndex = HistoryMax - 1;
+                }
+
+                if (HistoryMax) {
+                        data->DeleteChars(0, data->BufTextLen);
+                        data->InsertChars(0, LogBuffer->GetLine(HistoryHandle, HistoryIndex));
+                }
         }
         else if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) {
                 return CALLBACK_inputtext_switch_mode(data);
@@ -249,7 +218,6 @@ static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data) {
 
 static int CALLBACK_inputtext_switch_mode(ImGuiInputTextCallbackData* data) {
         (void)data;
-        SmallBuffer[0] = 0;
         SearchOutputLines.clear();
         SearchHistoryLines.clear();
         UpdateFocus = true;
@@ -273,7 +241,24 @@ static int CALLBACK_inputtext_switch_mode(ImGuiInputTextCallbackData* data) {
         return 0;
 }
 
-static void display_lines(const std::vector<Line>& lines, char* buffer) {
+
+static uint32_t string_copy(char* dest, uint32_t dest_len, const char* src) {
+        for (uint32_t i = 0; i < dest_len; ++i) {
+                dest[i] = src[i];
+                if (src[i] == '\0') {
+                        return i;
+                }
+
+        }
+        dest[dest_len - 1] = '\0';
+        return dest_len;
+}
+
+
+
+
+static void display_search_lines(LogBufferHandle handle, const std::vector<uint32_t>& lines) {
+        char temp_line[4096];
         ImGui::BeginChild("scrolling region");
         ImGuiListClipper clip{};
         clip.Begin((int)lines.size());
@@ -282,10 +267,9 @@ static void display_lines(const std::vector<Line>& lines, char* buffer) {
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0.f, 0.f });
                 for (auto i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
                         ImGui::PushID(i);
-                        const auto line = lines[i];
                         ImGui::SetNextItemWidth(-1.f);
-                        assert(line.len < 4096); //TODO: what was that weird bug i found....
-                        ImGui::InputText("#buffer", &buffer[line.start], line.len, ImGuiInputTextFlags_ReadOnly);
+                        string_copy(temp_line, sizeof(temp_line), LogBuffer->GetLine(handle, lines[i]));
+                        ImGui::InputText("#buffer", temp_line, sizeof(temp_line), ImGuiInputTextFlags_ReadOnly);
                         ImGui::PopID();
                 }
                 ImGui::PopStyleVar();
@@ -300,37 +284,47 @@ static void display_lines(const std::vector<Line>& lines, char* buffer) {
 }
 
 
-static const char* stristr(const char* haystack, const char* needle) {
-        if (haystack == NULL) return NULL;
-        if (needle == NULL) return NULL;
-        if (!haystack[0]) return NULL;
-        if (!needle[0]) return haystack;
-
-        const char* p1 = haystack;
-        const char* p2 = needle;
-        const char* r = NULL;
-
-        while (*p1 != 0 && *p2 != 0) {
-                if (tolower((unsigned char)*p1) == tolower((unsigned char)*p2)) {
-                        if (r == 0) {
-                                r = p1;
-                        }
-                        p2++;
-                } else {
-                        p2 = needle;
-                        if (r != 0) {
-                                p1 = r + 1;
-                        }
-
-                        if (tolower((unsigned char)*p1) == tolower((unsigned char)*p2)) {
-                                r = p1;
-                                p2++;
-                        } else {
-                                r = 0;
-                        }
+static void display_lines(LogBufferHandle handle) {
+        char temp_line[4096];
+        ImGui::BeginChild("scrolling region");
+        ImGuiListClipper clip{};
+        clip.Begin((int)LogBuffer->GetLineCount(handle));
+        while (clip.Step()) {
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{ 0.f, 2.f });
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0.f, 0.f });
+                for (auto i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
+                        ImGui::PushID(i);
+                        ImGui::SetNextItemWidth(-1.f);
+                        string_copy(temp_line, sizeof(temp_line), LogBuffer->GetLine(handle, i));
+                        ImGui::InputText("#buffer", temp_line, sizeof(temp_line), ImGuiInputTextFlags_ReadOnly);
+                        ImGui::PopID();
                 }
-                p1++;
+                ImGui::PopStyleVar();
+                ImGui::PopStyleVar();
         }
+        ImGui::TextUnformatted(" "); //more padding to fix scrolling at bottom
+        while (UpdateScroll) { //loop because we might be adding more console output across frames
+                ImGui::SetScrollHereY(1.f);
+                --UpdateScroll;
+        }
+        ImGui::EndChild();
+}
 
-        return *p2 == 0 ? r : 0;
+
+
+static bool strcasestr(const char* s, const char* find) {
+        char c, sc;
+        size_t len;
+        if ((c = *find++) != 0) {
+                c = (char)tolower((unsigned char)c);
+                len = strlen(find);
+                do {
+                        do {
+                                if ((sc = *s++) == 0)
+                                        return false;
+                        } while ((char)tolower((unsigned char)sc) != c);
+                } while (_strnicmp(s, find, len) != 0);
+                s--;
+        }
+        return true;
 }

@@ -10,6 +10,8 @@
 #define BETTERAPI_ENABLE_SFSE_MINIMAL
 #include "../betterapi.h"
 
+#include <cstdio>
+
 /* TODO List:
         -dynamic arrays for buffers
         -documentation
@@ -90,8 +92,19 @@ constexpr uint64_t OFFSET_console_run = 0x287df04; //void ConsoleRun(NULL, char*
 //---------------------------------------------------------------------------------------------
 
 
-#ifdef DISABLE_ASSERT
-#define ASSERT(X) do{}while(0)
-#else
-#define ASSERT(X) do{if(!(X)){char MSG[1024];auto len=snprintf(MSG,1024,"%s:%s:%u> ",__FILE__,__func__,__LINE__);snprintf(&MSG[len],1024-len,""#X" ");MessageBoxA(NULL,MSG,"ASSERTION FAILURE",0);ExitProcess(1);}}while(0)
-#endif
+// adding heavy debugging asserts until crashes are fixed
+static inline constexpr const char* GetRelativeProjectDir(const char* file_path) noexcept {
+        if (!file_path) return nullptr;
+        const char* x = file_path;
+        while (*x) ++x;
+        while ((x != file_path) && (*x != '\\')) --x;
+        --x;
+        while ((x != file_path) && (*x != '\\')) --x;
+        ++x;
+        return x;
+}
+
+#define HERE_MSG(BUFFER, BUFFER_SIZE) do{snprintf((BUFFER), (BUFFER_SIZE), "[ERROR] %s:%s:%d:", GetRelativeProjectDir(__FILE__), __func__, __LINE__);}while(0)
+#define FATAL_ERROR(FORMAT) do{char msg[1024]; HERE_MSG(msg, 256); snprintf(msg+strlen(msg), 768, " " FORMAT); MessageBoxA(NULL, msg, "Fatal Error", 0); abort(); }while(0)
+#define ASSERT(CONDITION) do{if(!(CONDITION)){FATAL_ERROR(#CONDITION);}}while(0)
+#define NOT_NULL(POINTER) ASSERT((POINTER) != NULL)

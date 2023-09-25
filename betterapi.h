@@ -1,6 +1,8 @@
 #ifndef BETTERAPI_API_H
 #define BETTERAPI_API_H
 
+#include <stdint.h>
+
 // Note: this API is not thread safe,
 // all of the below functions are operating within idxgiswapchain::present
 // as the game is trying submit a frame to the gpu
@@ -19,9 +21,14 @@
 #define BetterAPIName "BetterConsole"
 
 
-// This file has no includes and no dependencies and is plain C 
-// (C89 maybe? a 34 year old language), so we need a couple convenience typedefs
+// This file no dependencies and is plain C (C89 maybe? a 34 year old language)
+// so we need a couple convenience typedefs
 typedef unsigned char boolean;
+
+
+// Opaque handle for the log buffer system
+typedef uint32_t LogBufferHandle;
+
 
 // while visual studio (MSVC) lets you cast a function pointer to a void*
 // the C standard only lets you cast a function pointer to another
@@ -110,6 +117,32 @@ struct callback_api_t {
 };
 
 
+// A more rugged system for storing the log buffer
+// This is used 
+struct log_buffer_api_t {
+		// Create a handle, needed to identify the log buffer
+        LogBufferHandle (*Create)(const char* name);
+
+        // Self documenting use
+        const char* (*GetName)(const LogBufferHandle);
+
+        // Get the total number of bytes stored in the log buffer
+        uint32_t (*GetSize)(LogBufferHandle);
+
+        // Get the number of lines stored in the buffer
+        uint32_t (*GetLineCount)(LogBufferHandle);
+
+        // Retrieve a specific line for storage
+        const char* (*GetLine)(LogBufferHandle, uint32_t line);
+
+        // Clear a line buffer
+        void (*Clear)(LogBufferHandle);
+
+        // Log a line of text to the buffer
+        void (*Append)(LogBufferHandle, const char* log_line);
+};
+
+
 // This is all the above struct wrapped up in one place
 // why pointers to apis instead of the api itself? so that
 // I may extend any api without changing the size of BetterAPI
@@ -141,8 +174,6 @@ typedef struct better_api_t {
 #ifdef BETTERAPI_ENABLE_SFSE_MINIMAL
 #ifndef BETTERAPI_SFSE_MINIMAL
 #define BETTERAPI_SFSE_MINIMAL
-
-#include <stdint.h>
 
 #define MAKE_VERSION(major, minor, build) ((((major)&0xFF)<<24)|(((minor)&0xFF)<<16)|(((build)&0xFFF)<<4))
 

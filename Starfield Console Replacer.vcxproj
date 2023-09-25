@@ -160,6 +160,7 @@
     <ClCompile Include="src\configfile.cpp" />
     <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\hook_api.cpp" />
+    <ClCompile Include="src\log_buffer.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\simpledraw.cpp" />
   </ItemGroup>
@@ -179,6 +180,7 @@
     <ClInclude Include="src\configfile.h" />
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\hook_api.h" />
+    <ClInclude Include="src\log_buffer.h" />
     <ClInclude Include="src\main.h" />
     <ClInclude Include="src\simpledraw.h" />
   </ItemGroup>
