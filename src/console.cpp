@@ -20,6 +20,7 @@ enum class InputMode : uint32_t {
         SearchHistory
 };
 
+static void console_print(void* consolemgr, const char* fmt, va_list args);
 static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data);
 static int CALLBACK_inputtext_switch_mode(ImGuiInputTextCallbackData* data);
 static void display_search_lines(LogBufferHandle handle, const std::vector<uint32_t>& lines);
@@ -91,7 +92,7 @@ static void forward_to_old_consoleprint(void* consolemgr, const char* fmt, ...) 
 }
 
 
-extern void console_print(void* consolemgr, const char* fmt, va_list args) {
+static void console_print(void* consolemgr, const char* fmt, va_list args) {
         auto size = vsnprintf(IOBuffer, sizeof(IOBuffer), fmt, args);
         if (size <= 0) return;
         if (!LogBuffer) init_console();

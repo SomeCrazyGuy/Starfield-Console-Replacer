@@ -145,7 +145,7 @@ struct log_buffer_api_t {
 // and as a stop-gap measure, updates might be released that have non-working APIs
 typedef struct better_api_t {
         const struct hook_api_t* Hook;
-        const struct log_api_t* Log;
+        const struct log_buffer_api_t* LogBuffer;
         const struct simple_draw_t* SimpleDraw;
         const struct callback_api_t* Callback;
 } BetterAPI;

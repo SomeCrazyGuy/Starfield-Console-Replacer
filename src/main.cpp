@@ -11,6 +11,7 @@
 #include "hook_api.h"
 #include "simpledraw.h"
 #include "configfile.h"
+#include "log_buffer.h"
 
 
 extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
@@ -71,7 +72,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         static BetterAPI API;
         API.Hook = GetHookAPI();
         API.Callback = GetCallbackAPI();
-        API.Log = GetLogAPI();
+        API.LogBuffer = GetLogBufferAPI();
         API.SimpleDraw = GetSimpleDrawAPI();
 
         //broadcast to all listeners of "BetterConsole" during sfse postpostload
