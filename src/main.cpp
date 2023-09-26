@@ -42,6 +42,7 @@ static bool should_show_ui = false;
 static HWND window_handle = nullptr;
 
 
+static int HotkeyModifier = 0;
 static int ConsoleHotkey = VK_F1;
 static int FontScalePercent = 100;
 
@@ -63,6 +64,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 
         ReadConfigFile();
         CONFIG_INT(ConsoleHotkey);
+        CONFIG_INT(HotkeyModifier);
         CONFIG_INT(FontScalePercent);
         SaveConfigFile();
 
@@ -374,7 +376,14 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
 static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         if ((wParam == ConsoleHotkey) && (uMsg == WM_KEYDOWN)) {
-                should_show_ui = !should_show_ui;
+                if (HotkeyModifier) {
+                        if (GetKeyState(HotkeyModifier) < 0) {
+                                should_show_ui = !should_show_ui;
+                        }
+                }
+                else {
+                        should_show_ui = !should_show_ui;
+                }
         }
         if (should_show_ui) {
                 ClipCursor(NULL);
