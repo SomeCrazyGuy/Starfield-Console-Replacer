@@ -60,18 +60,6 @@ struct hook_api_t {
         boolean(*WriteMemory)(void* dest, const void* src, unsigned size);
 };
 
-// this api has useful logging capabilities
-struct log_api_t {
-        // general purpose logging, this will append to a logging buffer that the user can view
-        // internally this forwards to vsnprintf() so the normal format specifiers apply
-        // you may want to have a global variable that points to this for ease of use instead of
-        // BetterApi::Log::Log()
-        //
-        // Note, this currently outputs to the same buffer as the console log, this will change
-        // to a dedicated log buffer in the future
-        void (*Log)(const char* fmt, ...);
-};
-
 // This API allows you to create a basic mod menu without linking to imgui
 // if you play your cards right, you can write an entire mod without including any other
 // headers... not even the standard library!

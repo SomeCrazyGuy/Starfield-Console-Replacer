@@ -17,7 +17,6 @@ struct Config {
 };
 
 static std::vector<Config> ConfigFile{};
-static const auto Log = GetLogAPI()->Log;
 
 //TODO: copy over assert code from other project
 extern void ReadConfigFile() {
@@ -60,7 +59,6 @@ extern void ReadConfigFile() {
                 while (*s && (*s != '\n')) ++s;
                 *s++ = '\0'; //overwrite '\n' and null terminate value
 
-                Log("key(%s) = value(%s)", c.key, c.value);
                 ConfigFile.push_back(c);
         }
 }
@@ -75,7 +73,6 @@ extern void BindConfigInt(const char* name, int* value) {
                 if (_strcmpi(name, x.key) == 0) {
                         x.data = value; //bind
                         *value = strtol(x.value, NULL, 0);
-                        Log("Bind var(%s) to memory (%p)", name, value);
                         return;
                 }
         }
@@ -86,7 +83,6 @@ extern void BindConfigInt(const char* name, int* value) {
         c.data = value;
         c.value = NULL;
         ConfigFile.push_back(c);
-        Log("Adding config var %s = %d", c.key, *c.data);
 }
 
 extern void SaveConfigFile() {
@@ -96,13 +92,9 @@ extern void SaveConfigFile() {
 
         for (const auto& x : ConfigFile) {
                 if (!x.key) { //no key means comment line
-                        Log("Save comment %s", x.value);
                         fprintf(f, "%s\n", x.value);
                 } else if (x.data) { //only save lines that were bound to a value??
-                        Log("Save var %s", x.key);
                         fprintf(f, "%s=%d\n", x.key, *x.data);
-                } else {
-                        Log("Did not save Value");
                 }
         }
         fflush(f);

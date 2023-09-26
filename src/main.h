@@ -44,7 +44,7 @@
 // --------------------------------------------------------------------
 // ---- Change these offsets for each game update, need signatures ----
 // --------------------------------------------------------------------
-constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 7, 29);
+constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 7, 33);
 
 
 
@@ -69,7 +69,7 @@ constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 7, 29);
   FUN_140587784(uVar1);
   return;
 */
-constexpr uint64_t OFFSET_console_vprint = 0x2883978; //stolen from sfse, void ConsolePrintV(ConsoleMgr*, const char* fmt, va_list args)
+constexpr uint64_t OFFSET_console_vprint = 0x2886AD8; //stolen from sfse, void ConsolePrintV(ConsoleMgr*, const char* fmt, va_list args)
 
 
 
@@ -83,7 +83,7 @@ memset(local_c38,0,0x400);
 pcVar15 = "float fresult\nref refr\nset refr to GetSelectedRef\nset fresult to ";
 
 */
-constexpr uint64_t OFFSET_console_run = 0x287df04; //void ConsoleRun(NULL, char* cmd)
+constexpr uint64_t OFFSET_console_run = 0x2881064; //void ConsoleRun(NULL, char* cmd)
 
 
 //---------------------------------------------------------------------------------------------

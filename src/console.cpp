@@ -112,23 +112,6 @@ static void console_run(char* cmd) {
         RunConsoleCommand(NULL, cmd);
 }
 
-static void LogWrapper(const char* fmt, ...) {
-        va_list args;
-        va_start(args, fmt);
-        console_print(NULL, fmt, args);
-        va_end(args);
-}
-
-extern const struct log_api_t* GetLogAPI() {
-        static bool init = false;
-        static struct log_api_t ret;
-        if (!init) {
-                init = true;
-                ret.Log = &LogWrapper;
-        }
-        return &ret;
-}
-
 extern void draw_console_window() {
         if (!LogBuffer) init_console();
 
