@@ -359,7 +359,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                         //scale up the font based on 1920x1080 = 100%
                         float hf = height / 1080.f;
                         if (hf > 1.f) {
-                                FontScalePercent *= hf;
+                                FontScalePercent = (int)(hf * FontScalePercent);
                         }
 
                         //force font size based on fontscaleoverride parameter

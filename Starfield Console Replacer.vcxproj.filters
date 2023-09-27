@@ -59,6 +59,9 @@
     <ClCompile Include="src\log_buffer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\settings_tab.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h">
@@ -109,10 +112,10 @@
     <ClInclude Include="src\configfile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="resource.h">
+    <ClInclude Include="src\log_buffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\log_buffer.h">
+    <ClInclude Include="src\settings_tab.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
