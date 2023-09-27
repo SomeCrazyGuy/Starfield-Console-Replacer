@@ -47,6 +47,10 @@ static int ConsoleHotkey = VK_F1;
 static int FontScalePercent = 100;
 
 
+//this is where the api* that all clients use comes from
+static BetterAPI API;
+
+
 static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
         auto ret = OLD_CreateCommandQueue(This, pDesc, riid, ppCommandQueue);
         static unsigned ccc = 0;
@@ -59,34 +63,22 @@ static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_
 }
 
 
-extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
-        ASSERT(OLD_Present == NULL);
+static void HookDX12() {
+        // Currently not compatible with dlss 3 frame generation, but the user wont know that unless we tell them
+        if (GetModuleHandleA("nvngx_dlssg")) {
+                MessageBoxA(NULL,
+                        BetterAPIName " is currently not compatible with mods that load ngngx_dlssg.dll"
+                        " which is used for the optional DLSS3 frame generation feature of some mods"
+                        " in the future compatibility will improve but for now you will need to remove "
+                        "ngngx_dlssg.dll in the nv-streamline folder. NOTE: ngngx_dlss.dll (without the 'g') IS "
+                        "COMPATIBLE with " BetterAPIName " and will continue to be compatible going forward."
+                        " Press OK to exit starfield",
+                        BetterAPIName " Error",
+                        0
+                );
 
-        ReadConfigFile();
-        CONFIG_INT(ConsoleHotkey);
-        CONFIG_INT(HotkeyModifier);
-        CONFIG_INT(FontScalePercent);
-        SaveConfigFile();
-
-        static PluginHandle MyPluginHandle;
-        static SFSEMessagingInterface* MessageInterface;
-
-        static BetterAPI API;
-        API.Hook = GetHookAPI();
-        API.Callback = GetCallbackAPI();
-        API.LogBuffer = GetLogBufferAPI();
-        API.SimpleDraw = GetSimpleDrawAPI();
-
-        //broadcast to all listeners of "BetterConsole" during sfse postpostload
-        static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
-                if (msg->type == MessageType_SFSE_PostPostLoad) {
-                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, &API, sizeof(API), NULL);
-                }
-        };
-
-        MyPluginHandle = sfse->GetPluginHandle();
-        MessageInterface = (SFSEMessagingInterface*) sfse->QueryInterface(InterfaceID_Messaging);
-        MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
+                ExitProcess(1);
+        }
 
         //We need to find IDXGISwapChain3::Present() to hook it, we are going to take the long way....
         static const auto temp_wndproc = [](HWND, UINT, WPARAM, LPARAM)-> LRESULT {
@@ -122,7 +114,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         // Create device
         D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_12_0;
         ASSERT(D3D12CreateDevice(NULL, featureLevel, IID_PPV_ARGS(&g_pd3dDevice)) == S_OK);
-        
+
         IDXGIFactory4* dxgiFactory = NULL;
         ASSERT(CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory)) == S_OK);
 
@@ -148,8 +140,8 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         OLD_CreateCommandQueue =
                 (decltype(OLD_CreateCommandQueue))API.Hook->HookVirtualTable(
                         g_pd3dDevice,
-                        (unsigned) DeviceFunctionIndex::CreateCommandQueue,
-                        (FUNC_PTR) FAKE_CreateCommandQueue
+                        (unsigned)DeviceFunctionIndex::CreateCommandQueue,
+                        (FUNC_PTR)FAKE_CreateCommandQueue
                 );
 
         IDXGISwapChain1* swapChain1 = NULL;
@@ -174,8 +166,8 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         OLD_Present =
                 (decltype(OLD_Present))API.Hook->HookVirtualTable(
                         g_pSwapChain,
-                        (unsigned) SwapchainFunctionIndex::Present,
-                        (FUNC_PTR) FAKE_Present
+                        (unsigned)SwapchainFunctionIndex::Present,
+                        (FUNC_PTR)FAKE_Present
                 );
 
         g_pSwapChain->Release();
@@ -184,6 +176,41 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 
         ::DestroyWindow(hwnd);
         ::UnregisterClassA(wc.lpszClassName, wc.hInstance);
+}
+
+
+extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
+        ASSERT(OLD_Present == NULL);
+
+        ReadConfigFile();
+        CONFIG_INT(ConsoleHotkey);
+        CONFIG_INT(HotkeyModifier);
+        CONFIG_INT(FontScalePercent);
+        SaveConfigFile();
+
+        static PluginHandle MyPluginHandle;
+        static SFSEMessagingInterface* MessageInterface;
+
+        API = BetterAPI{
+                GetHookAPI(),
+                GetLogBufferAPI(),
+                GetSimpleDrawAPI(),
+                GetCallbackAPI()
+        };
+
+        //broadcast to all listeners of "BetterConsole" during sfse postpostload
+        static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
+                if (msg->type == MessageType_SFSE_PostPostLoad) {
+                        HookDX12();
+                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, &API, sizeof(API), NULL);
+                }
+        };
+
+        MyPluginHandle = sfse->GetPluginHandle();
+        MessageInterface = (SFSEMessagingInterface*) sfse->QueryInterface(InterfaceID_Messaging);
+        MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
+
+        
         
         // the game uses the rawinput interface to read keyboard and mouse events
         // if we hook that function we can disable input to the game when the imgui interface is open
