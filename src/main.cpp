@@ -44,7 +44,7 @@ static HWND window_handle = nullptr;
 
 static int HotkeyModifier = 0;
 static int ConsoleHotkey = VK_F1;
-static int FontScalePercent = 100;
+static int FontScaleOverride = 0;
 
 
 //this is where the api* that all clients use comes from
@@ -185,7 +185,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         ReadConfigFile();
         CONFIG_INT(ConsoleHotkey);
         CONFIG_INT(HotkeyModifier);
-        CONFIG_INT(FontScalePercent);
+        CONFIG_INT(FontScaleOverride);
         SaveConfigFile();
 
         static PluginHandle MyPluginHandle;
@@ -341,6 +341,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 ImGui_ImplWin32_NewFrame();
                 ImGui::NewFrame();
 
+                static int FontScalePercent = 100;
                 static bool initpos = false;
                 if (!initpos) {
                         initpos = true;
@@ -350,8 +351,21 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                         float height = (float)(rect.bottom - rect.top) / 2;
                         assert(width > 0.f);
                         assert(height > 0.f);
+
+                        //put the window in the middle of the screen at 50% windows hidth and height
                         ImGui::SetNextWindowPos(ImVec2{ width / 2, height / 2 });
                         ImGui::SetNextWindowSize(ImVec2{ width, height });
+
+                        //scale up the font based on 1920x1080 = 100%
+                        float hf = height / 1080.f;
+                        if (hf > 1.f) {
+                                FontScalePercent *= hf;
+                        }
+
+                        //force font size based on fontscaleoverride parameter
+                        if (FontScaleOverride) {
+                                FontScalePercent = FontScaleOverride;
+                        }
                 }
 
                 ImGui::Begin("BetterConsole");
