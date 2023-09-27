@@ -12,6 +12,7 @@
 #include "simpledraw.h"
 #include "configfile.h"
 #include "log_buffer.h"
+#include "settings_tab.h"
 
 
 extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
@@ -341,6 +342,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 ImGui_ImplWin32_NewFrame();
                 ImGui::NewFrame();
 
+                static ImGuiTabItemFlags ConsoleDefaultFlags = ImGuiTabItemFlags_SetSelected;
                 static int FontScalePercent = 100;
                 static bool initpos = false;
                 if (!initpos) {
@@ -371,7 +373,11 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 ImGui::Begin("BetterConsole");
                 ImGui::SetWindowFontScale(FontScalePercent / 100.f);
                 ImGui::BeginTabBar("tab items");
-                if (ImGui::BeginTabItem("Console")) {
+                if (ImGui::BeginTabItem("Settings")) {
+                        draw_settings_tab();
+                        ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Console", NULL, ConsoleDefaultFlags)) {
                         draw_console_window();
                         ImGui::EndTabItem();
                 }
@@ -380,6 +386,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 ImGui::End();
                 draw_imguidraw_callbacks();
                 
+                ConsoleDefaultFlags = 0; //only make it the default the first time
 
                 ImGui::EndFrame();
                 ImGui::Render();
