@@ -20,14 +20,18 @@ enum class InputMode : uint32_t {
         SearchHistory
 };
 
+static void console_run(void* consolemgr, char* cmd);
 static void console_print(void* consolemgr, const char* fmt, va_list args);
+
 static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data);
 static int CALLBACK_inputtext_switch_mode(ImGuiInputTextCallbackData* data);
 static void display_search_lines(LogBufferHandle handle, const std::vector<uint32_t>& lines);
 static void display_lines(LogBufferHandle handle);
 static bool strcasestr(const char* haystack, const char* needle);
 
-static void(*OLD_ConsolePrintV)(void*, const char*, va_list) = nullptr;          
+static void(*OLD_ConsolePrintV)(void*, const char*, va_list) = nullptr;    
+static void(*OLD_ConsoleRun)(void*, char*) = nullptr;
+
 static int UpdateScroll = 0;
 static bool UpdateFocus = true;
 static int HistoryIndex = -1;
@@ -57,6 +61,11 @@ static void init_console() {
         OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
                 (FUNC_PTR)HookAPI->Relocate(OFFSET_console_vprint),
                 (FUNC_PTR)console_print
+        );
+
+        OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
+                (FUNC_PTR)HookAPI->Relocate(OFFSET_console_run),
+                (FUNC_PTR)console_run
         );
 
         fopen_s(&OutputFile, OUTPUT_FILE_PATH, "ab");
@@ -105,12 +114,11 @@ static void console_print(void* consolemgr, const char* fmt, va_list args) {
 }
 
 
-static void console_run(char* cmd) {
-        static void(*RunConsoleCommand)(void*, char*) = nullptr;
-        if (!RunConsoleCommand) {
-                RunConsoleCommand = (decltype(RunConsoleCommand))HookAPI->Relocate(OFFSET_console_run);
-        }
-        RunConsoleCommand(NULL, cmd);
+static void console_run(void* consolemgr, char* cmd) {
+        LogBuffer->Append(HistoryHandle, cmd);
+        fputs(cmd, HistoryFile);
+        fputc('\n', HistoryFile);
+        OLD_ConsoleRun(consolemgr, cmd);
 }
 
 extern void draw_console_window() {
@@ -120,7 +128,7 @@ extern void draw_console_window() {
         static const char* GameStates[] = { "Paused", "Running" };
         if (ImGui::Button(GameStates[GameState])) {
                 char tgp[] = "ToggleGamePause";
-                console_run(tgp);
+                console_run(NULL, tgp);
                 GameState = !GameState;
         }
         ImGui::SameLine();
@@ -134,9 +142,7 @@ extern void draw_console_window() {
         if (CommandMode == InputMode::Command) {
                 if (ImGui::InputText("Command Mode", IOBuffer, sizeof(IOBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_cmdline)) {
                         HistoryIndex = LogBuffer->GetLineCount(HistoryHandle);
-                        fputs(IOBuffer, HistoryFile);
-                        fputc('\n', HistoryFile);
-                        console_run(IOBuffer);
+                        console_run(NULL, IOBuffer);
                         IOBuffer[0] = 0;
                         fflush(OutputFile);
                         fflush(HistoryFile);
@@ -232,7 +238,6 @@ static uint32_t string_copy(char* dest, uint32_t dest_len, const char* src) {
                 if (src[i] == '\0') {
                         return i;
                 }
-
         }
         dest[dest_len - 1] = '\0';
         return dest_len;
