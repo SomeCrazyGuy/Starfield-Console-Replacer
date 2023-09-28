@@ -3,6 +3,17 @@
 
 #include <stdint.h>
 
+/******************************************************************************
+        W A R N I N G !
+
+        Because no other published mods *currenty* rely on this API,
+        I'm actively working on it and as such breaking it all the time.
+        I'm trying to refine the API to best suit plugin development.
+
+******************************************************************************/
+
+
+
 // Note: this API is not thread safe,
 // all of the below functions are operating within idxgiswapchain::present
 // as the game is trying submit a frame to the gpu
