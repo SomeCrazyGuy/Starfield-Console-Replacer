@@ -9,16 +9,21 @@
 struct LogBuffer {
 	std::string buffer;
 	std::vector<uint32_t> lines;
-	const char *name;
+	const char* name{nullptr};
+	FILE* logfile{nullptr};
 };
 
 
-static std::vector<LogBuffer> Logs;
+static std::vector<LogBuffer> Logs{};
 
 
-static LogBufferHandle LogBufferCreate(const char* name) {
+static LogBufferHandle LogBufferCreate(const char* name, const char* path) {
 	LogBuffer log;
 	log.name = name;
+	log.logfile = NULL;
+	if (path) {
+		fopen_s(&log.logfile, path, "ab");
+	}
 	auto ret = Logs.size();
 	Logs.push_back(log);
 	return (LogBufferHandle)ret;
@@ -62,22 +67,24 @@ static void LogBufferAppend(LogBufferHandle handle, const char* line) {
 	l.buffer.append(line);
 	l.buffer += '\0';
 	l.lines.push_back((uint32_t)offset);
-}
-
-
-extern const struct log_buffer_api_t* GetLogBufferAPI() {
-	static struct log_buffer_api_t ret;
-	static bool once = false;
-	if (!once) {
-		once = true;
-		ret.Create = &LogBufferCreate;
-		ret.GetName = &LogBufferGetName;
-		ret.GetSize = &LogBufferGetSize;
-		ret.GetLineCount = &LogBufferGetLineCount;
-		ret.GetLine = &LogBufferGetLine;
-		ret.Clear = &LogBufferClear;
-		ret.Append = &LogBufferAppend;
+	if (l.logfile) {
+		fputs(line, l.logfile);
+		fputc('\n', l.logfile);
 	}
-	return &ret;
 }
 
+
+static constexpr struct log_buffer_api_t LogBufferAPI {
+	&LogBufferCreate,
+	&LogBufferGetName,
+	&LogBufferGetSize,
+	&LogBufferGetLineCount,
+	&LogBufferGetLine,
+	&LogBufferClear,
+	&LogBufferAppend,
+};
+
+
+extern constexpr const struct log_buffer_api_t* GetLogBufferAPI() {
+	return &LogBufferAPI;
+}

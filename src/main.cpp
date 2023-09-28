@@ -6,12 +6,8 @@
 #include <dxgi1_6.h>
 #include <d3d12.h>
 
-#include "callback.h"
 #include "console.h"
-#include "hook_api.h"
-#include "simpledraw.h"
 #include "configfile.h"
-#include "log_buffer.h"
 #include "settings_tab.h"
 
 
@@ -49,7 +45,12 @@ static int FontScaleOverride = 0;
 
 
 //this is where the api* that all clients use comes from
-static BetterAPI API;
+static const BetterAPI API {
+        GetHookAPI(),
+        GetLogBufferAPI(),
+        GetSimpleDrawAPI(),
+        GetCallbackAPI(),
+};
 
 
 static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
@@ -192,18 +193,11 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;
 
-        API = BetterAPI{
-                GetHookAPI(),
-                GetLogBufferAPI(),
-                GetSimpleDrawAPI(),
-                GetCallbackAPI()
-        };
-
         //broadcast to all listeners of "BetterConsole" during sfse postpostload
         static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
                 if (msg->type == MessageType_SFSE_PostPostLoad) {
                         HookDX12();
-                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, &API, sizeof(API), NULL);
+                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, (void*) & API, sizeof(API), NULL);
                 }
         };
 

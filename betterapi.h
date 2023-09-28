@@ -71,13 +71,21 @@ struct simple_draw_t {
         void (*Text)(const char *fmt, ...);
 
         // draw a button, returns true if the button was clicked
-        boolean(*Button)(const char* text);
+        boolean(*Button)(const char* name);
 
         // draw a checkbox, needs to store persistent state so pass a static boolean pointer
         // returns the value of *state for convenience in an 'if' statement
-        boolean (*Checkbox)(const char* text, boolean* state);
+        boolean (*Checkbox)(const char* name, boolean* state);
 
-        //more to come....
+        // draw a text input widget for a single line of text
+        // buffer is where the text is stored
+        // true_on_enter determines if the widget returns true on every character typed or only when enter is pressed
+        boolean(*InputText)(const char* name, char* buffer, uint32_t buffer_size, boolean true_on_enter);
+
+        // use the remaining vertical space to render the logbuffer referenced by handle
+        // if scroll_to_bottom is true, force the logbuffer region to scroll from its current position
+        // to the bottom (useful when you add lines)
+        void (*ShowLogBuffer)(LogBufferHandle handle, boolean scroll_to_bottom);
 };
 
 // This allows you to register a callback function for various functions like drawing to the screen
@@ -108,8 +116,10 @@ struct callback_api_t {
 // A more rugged system for storing the log buffer
 // This is used 
 struct log_buffer_api_t {
-		// Create a handle, needed to identify the log buffer
-        LogBufferHandle (*Create)(const char* name);
+	// Create a handle, needed to identify the log buffer
+        // name is the name of the logbuffer as it shows up in the UI
+        // path is an optional path to a logfile to append with logs
+        LogBufferHandle (*Create)(const char* name, const char* path);
 
         // Self documenting use
         const char* (*GetName)(const LogBufferHandle);

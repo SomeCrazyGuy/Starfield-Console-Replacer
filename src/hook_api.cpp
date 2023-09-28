@@ -50,18 +50,13 @@ static boolean WriteMemory(void* dest, const void* src, unsigned length) {
         return (ret && (bytes_written == length));
 }
 
+static constexpr struct hook_api_t HookAPI {
+        &HookFunction,
+        &HookVirtualTable,
+        &Relocate,
+        &WriteMemory
+};
 
-extern const struct hook_api_t* GetHookAPI() {
-        static bool init = false;
-        static hook_api_t api;
-
-        if (!init) {
-                init = true;
-                api.HookFunction = &HookFunction;
-                api.HookVirtualTable = &HookVirtualTable;
-                api.Relocate = &Relocate;
-                api.WriteMemory = &WriteMemory;
-        }
-
-        return &api;
+extern constexpr const struct hook_api_t* GetHookAPI() {
+        return &HookAPI;
 }

@@ -19,15 +19,13 @@ static void RegisterImGuiDrawCallback(ImGuiDrawCallback callback) {
         DrawCallbacks.push_back(callback);
 }
 
-extern const struct callback_api_t* GetCallbackAPI() {
-        static bool init = false;
-        static callback_api_t ret;
-        if (!init) {
-                init = true;
-                ret.SimpleDrawCallback = &RegisterSimpleDrawCallback;
-                ret.ImGuiDrawCallback = &RegisterImGuiDrawCallback;
-        }
-        return &ret;
+static constexpr struct callback_api_t CallbackAPI{
+        &RegisterSimpleDrawCallback,
+        &RegisterImGuiDrawCallback
+};
+
+extern constexpr const struct callback_api_t* GetCallbackAPI() {
+        return &CallbackAPI;
 }
 
 

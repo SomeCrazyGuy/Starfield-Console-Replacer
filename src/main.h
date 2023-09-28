@@ -10,6 +10,13 @@
 #define BETTERAPI_ENABLE_SFSE_MINIMAL
 #include "../betterapi.h"
 
+#include "callback.h"
+#include "hook_api.h"
+#include "simpledraw.h"
+#include "log_buffer.h"
+
+
+
 #include <cstdio>
 
 /* TODO List:
@@ -107,3 +114,4 @@ static inline constexpr const char* GetRelativeProjectDir(const char* file_path)
 #define FATAL_ERROR(FORMAT) do{char msg[1024]; HERE_MSG(msg, 256); snprintf(msg+strlen(msg), 768, " " FORMAT); MessageBoxA(NULL, msg, "Fatal Error", 0); abort(); }while(0)
 #define ASSERT(CONDITION) do{if(!(CONDITION)){FATAL_ERROR(#CONDITION);}}while(0)
 #define NOT_NULL(POINTER) ASSERT((POINTER) != NULL)
+

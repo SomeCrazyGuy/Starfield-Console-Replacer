@@ -1,5 +1,5 @@
 #pragma once
 
-#include "main.h"
+#include "../betterapi.h"
 
-extern const struct simple_draw_t* GetSimpleDrawAPI();
+extern constexpr const struct simple_draw_t* GetSimpleDrawAPI();
