@@ -62,7 +62,7 @@
     <ClCompile Include="src\settings_tab.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\log_tab.cpp">
+    <ClCompile Include="src\gui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -121,7 +121,7 @@
     <ClInclude Include="src\settings_tab.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\log_tab.h">
+    <ClInclude Include="src\gui.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

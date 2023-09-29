@@ -46,9 +46,29 @@ typedef uint32_t LogBufferHandle;
 // function pointer. Whatever, but this does help document the API better
 typedef void (*FUNC_PTR)(void);
 
-// This is used in the callback api below to register a function
-// to be called every frame for the purpose of drawing using imgui
-typedef void(*ImGuiDrawCallback)(void* imgui_context);
+
+// For draw callbacks
+typedef void (*DRAW_FUNC)(void* imgui_context);
+
+typedef struct draw_callbacks_t {
+        // intrusive double-linked list, do not touch
+        struct draw_callbacks_t* ll_prev;
+        struct draw_callbacks_t* ll_next;
+
+        // how you want you plugin to show up in the UI
+        const char* Name; 
+        
+        // the optional callbacks for drawing
+        DRAW_FUNC DrawTab; // called to draw the contents of your mods tab
+        DRAW_FUNC DrawSettings; // called to draw your mod settings page
+        DRAW_FUNC DrawLog; // called to draw your mods log page
+        DRAW_FUNC DrawWindow; // called to draw your mods imgui window
+} DrawCallbacks;
+
+struct callback_api_t {
+        void (*RegisterDrawCallbacks)(DrawCallbacks* draw_callbacks);
+};
+
 
 
 // This api deals with hooking functions and vtables
@@ -97,30 +117,6 @@ struct simple_draw_t {
         // if scroll_to_bottom is true, force the logbuffer region to scroll from its current position
         // to the bottom (useful when you add lines)
         void (*ShowLogBuffer)(LogBufferHandle handle, boolean scroll_to_bottom);
-};
-
-// This allows you to register a callback function for various functions like drawing to the screen
-// currently there is no way to remove a callback, nor a way to prevent callbacks from being added more than once
-// these callbacks are called every frame only while the imgui interface is shown
-struct callback_api_t {
-        // your mod will show up as "name" in the mod menu
-        // if your entry in the mod menu is selected then callback will be called every frame
-        // use the simple_draw api to build your mod menu
-        void (*SimpleDrawCallback)(const char* name, FUNC_PTR callback);
-
-        // register "callback" to be called every frame, you will be given the pointer to
-        // the imgui context, make sure to call ImGui::SetCurrentContext(imgui_context)
-        // before using any imgui drawing functions
-        //
-        // Please make sure you are using the same version of imgui that betterconsole is using!!!
-        // imgui versions are not forward compatible and drawing across dll boundaries is not easy
-        // Never try to draw from a separate thread!
-        //
-        // Note: do not compile any imgui backends (files with "impl" in the name) betterconsole already
-        // has the backends setup, it should just work
-        //
-        // Note2: technically you can use the simple_draw api in here as well, but why would you?
-        void (*ImGuiDrawCallback)(ImGuiDrawCallback callback);
 };
 
 

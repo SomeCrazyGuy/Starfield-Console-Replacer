@@ -6,6 +6,7 @@
 #include <dxgi1_6.h>
 #include <d3d12.h>
 
+#include "gui.h"
 #include "console.h"
 #include "configfile.h"
 #include "settings_tab.h"
@@ -205,7 +206,8 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         MessageInterface = (SFSEMessagingInterface*) sfse->QueryInterface(InterfaceID_Messaging);
         MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
 
-        
+        // The console part of better console is now minimally coupled to the mod menu
+        setup_console(&API);
         
         // the game uses the rawinput interface to read keyboard and mouse events
         // if we hook that function we can disable input to the game when the imgui interface is open
@@ -336,51 +338,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 ImGui_ImplWin32_NewFrame();
                 ImGui::NewFrame();
 
-                static ImGuiTabItemFlags ConsoleDefaultFlags = ImGuiTabItemFlags_SetSelected;
-                static int FontScalePercent = 100;
-                static bool initpos = false;
-                if (!initpos) {
-                        initpos = true;
-                        RECT rect;
-                        GetClientRect(window_handle, &rect);
-                        float width = (float)(rect.right - rect.left) / 2;
-                        float height = (float)(rect.bottom - rect.top) / 2;
-                        assert(width > 0.f);
-                        assert(height > 0.f);
-
-                        //put the window in the middle of the screen at 50% windows hidth and height
-                        ImGui::SetNextWindowPos(ImVec2{ width / 2, height / 2 });
-                        ImGui::SetNextWindowSize(ImVec2{ width, height });
-
-                        //scale up the font based on 1920x1080 = 100%
-                        float hf = height / 1080.f;
-                        if (hf > 1.f) {
-                                FontScalePercent = (int)(hf * FontScalePercent);
-                        }
-
-                        //force font size based on fontscaleoverride parameter
-                        if (FontScaleOverride) {
-                                FontScalePercent = FontScaleOverride;
-                        }
-                }
-
-                ImGui::Begin("BetterConsole");
-                ImGui::SetWindowFontScale(FontScalePercent / 100.f);
-                ImGui::BeginTabBar("tab items");
-                if (ImGui::BeginTabItem("Settings")) {
-                        draw_settings_tab();
-                        ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Console", NULL, ConsoleDefaultFlags)) {
-                        draw_console_window();
-                        ImGui::EndTabItem();
-                }
-                draw_simpledraw_tabs();
-                ImGui::EndTabBar();
-                ImGui::End();
-                draw_imguidraw_callbacks();
-                
-                ConsoleDefaultFlags = 0; //only make it the default the first time
+                draw_gui();
 
                 ImGui::EndFrame();
                 ImGui::Render();
