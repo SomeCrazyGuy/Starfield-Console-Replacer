@@ -82,7 +82,6 @@ static void console_print(void* consolemgr, const char* fmt, va_list args);
 
 static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data);
 static int CALLBACK_inputtext_switch_mode(ImGuiInputTextCallbackData* data);
-static void display_search_lines(LogBufferHandle handle, const std::vector<uint32_t>& lines);
 static bool strcasestr(const char* haystack, const char* needle);
 
 static void(*OLD_ConsolePrintV)(void*, const char*, va_list) = nullptr;    
@@ -184,7 +183,6 @@ static void draw_console_window(void* imgui_context) {
                         IOBuffer[0] = 0;
                         UpdateFocus = true;
                 }
-                //display_lines(OutputHandle);
                 SimpleDraw->ShowLogBuffer(OutputHandle, UpdateScroll);
         }
         else if (CommandMode == InputMode::SearchOutput) {
@@ -283,7 +281,6 @@ static bool strcasestr(const char* s, const char* find) {
                                         return false;
                         } while ((char)tolower((unsigned char)sc) != c);
                 } while (_strnicmp(s, find, len) != 0);
-                s--;
         }
         return true;
 }
