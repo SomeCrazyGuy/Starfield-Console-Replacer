@@ -41,6 +41,10 @@ typedef unsigned char boolean;
 typedef uint32_t LogBufferHandle;
 
 
+//opaque handle for the itemarray api
+typedef uint32_t ItemArrayHandle;
+
+
 // while visual studio (MSVC) lets you cast a function pointer to a void*
 // the C standard only lets you cast a function pointer to another
 // function pointer. Whatever, but this does help document the API better
@@ -49,6 +53,11 @@ typedef void (*FUNC_PTR)(void);
 
 // For draw callbacks
 typedef void (*DRAW_FUNC)(void* imgui_context);
+
+
+// For hotkeys callback
+typedef boolean(*HOTKEY_FUNC)(uint32_t vk_keycode, boolean shift, boolean ctrl);
+
 
 typedef struct draw_callbacks_t {
         // intrusive double-linked list, do not touch
@@ -67,6 +76,7 @@ typedef struct draw_callbacks_t {
 
 struct callback_api_t {
         void (*RegisterDrawCallbacks)(DrawCallbacks* draw_callbacks);
+        void (*RegisterHotkey)(const char* name, HOTKEY_FUNC func);
 };
 
 
@@ -113,10 +123,38 @@ struct simple_draw_t {
         // true_on_enter determines if the widget returns true on every character typed or only when enter is pressed
         boolean(*InputText)(const char* name, char* buffer, uint32_t buffer_size, boolean true_on_enter);
 
+
+        // split the remainaing space into a left and right region
+        // the left region occupies a left_size (eg: .5) fraction of the screen
+        // the remaining space is reserved for the HBoxRight() side
+        void (*HboxLeft)(float left_size);
+
+        // the counterpart of HBoxLeft 
+        // no argument needed, the size is the remaining space not taken up by hbox left
+        void (*HBoxRight)();
+
+        // needed to end hbox calculation
+        void (*HBoxEnd)();
+
+        // display an int number editor as a draggable slider that is aldo editable
+        // min and max define the range of the *value
+        // step defines the granilarity of the movement
+        // the return value is true if the value was changed this frame
+        boolean (*DragInt)(const char* name, int* value, int min, int max);
+
+        // follows the same rules as the sliderint above
+        boolean(*DragFloat)(const char* name, float* value, float min, float max);
+
+
         // use the remaining vertical space to render the logbuffer referenced by handle
         // if scroll_to_bottom is true, force the logbuffer region to scroll from its current position
         // to the bottom (useful when you add lines)
         void (*ShowLogBuffer)(LogBufferHandle handle, boolean scroll_to_bottom);
+
+        // use the remaining vertical space to render the logbuffer referenced by handle
+        // if scroll_to_bottom is true, force the logbuffer region to scroll from its current position
+        // takes a pointer to an array of line numbers and only displays those lines in the widget
+        void (*ShowFilteredLogBuffer)(LogBufferHandle handle, const uint32_t* lines, uint32_t line_count, boolean scroll_to_bottom);
 };
 
 
@@ -145,6 +183,45 @@ struct log_buffer_api_t {
 
         // Log a line of text to the buffer
         void (*Append)(LogBufferHandle, const char* log_line);
+
+        // Save the log buffer to a file, all at once rather than on append
+        void (*Save)(LogBufferHandle handle, const char* filename);
+
+        // Restore the log buffer from a file, the file is then used for appending
+        LogBufferHandle (*Restore)(const char* name, const char* filename);
+
+        // if a logbuffer has a file it is writing, close it
+        void (*CloseFile)(LogBufferHandle handle);
+};
+
+
+struct item_array_api_t {
+        // create a new item array using element_size elements
+        ItemArrayHandle (*Create)(const char* name, uint32_t element_size);
+
+        // Retrieve the mane of the itemarray
+        const char* (*Name)(ItemArrayHandle handle);
+
+        // get the count of elements in the array
+        uint32_t (*Count)(ItemArrayHandle handle);
+
+        // get a pointer to the raw data
+        void* (*Data)(ItemArrayHandle handle);
+
+        // Retrieve a specific item from the array
+        void* (*At)(ItemArrayHandle handle, uint32_t index);
+
+        // copy an item into the item array
+        void (*PushBack)(ItemArrayHandle handle, const void* element);
+
+        // Append an array of items into the item array
+        void (*Append) (ItemArrayHandle handle, const void* elements, uint32_t count);
+
+        // Clear the elements of an item array
+        void (*Clear) (ItemArrayHandle handle);
+
+        // Free the memory associated with an item array
+        void (*Free)(ItemArrayHandle);
 };
 
 
@@ -165,6 +242,7 @@ typedef struct better_api_t {
         const struct log_buffer_api_t* LogBuffer;
         const struct simple_draw_t* SimpleDraw;
         const struct callback_api_t* Callback;
+        const struct item_array_api_t* ItemArray;
 } BetterAPI;
 
 

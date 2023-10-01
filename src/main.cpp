@@ -375,16 +375,23 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
 
 static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-        if ((wParam == ConsoleHotkey) && (uMsg == WM_KEYDOWN)) {
-                if (HotkeyModifier) {
-                        if (GetKeyState(HotkeyModifier) < 0) {
+        if (uMsg == WM_KEYDOWN) {
+                // built-in hotkey takes priority
+                if (wParam == ConsoleHotkey) {
+                        if ((HotkeyModifier == 0) || (GetKeyState(HotkeyModifier) < 0)) {
                                 should_show_ui = !should_show_ui;
                         }
                 }
-                else {
-                        should_show_ui = !should_show_ui;
+
+                boolean shift = (GetKeyState(VK_SHIFT) < 0);
+                boolean ctrl = (GetKeyState(VK_CONTROL) < 0);
+                auto count = GetHotkeyCount();
+
+                for (uint32_t i = 0; i < count; ++i) {
+                        if (GetHotkeyFunc(i)((uint32_t)wParam, shift, ctrl)) break; //stop on first match
                 }
         }
+
         if (should_show_ui) {
                 ClipCursor(NULL);
                 ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);

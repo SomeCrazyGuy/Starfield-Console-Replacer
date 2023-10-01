@@ -101,7 +101,6 @@ static const simple_draw_t* SimpleDraw = nullptr;
 static char IOBuffer[256 * 1024];
 static LogBufferHandle OutputHandle;
 static LogBufferHandle HistoryHandle;
-static FILE* HistoryFile = nullptr;
 static std::vector<uint32_t> SearchOutputLines{};
 static std::vector<uint32_t> SearchHistoryLines{};
 
@@ -117,7 +116,7 @@ static void init_console() {
         SimpleDraw = API->SimpleDraw;
 
         OutputHandle = LogBuffer->Create("Console Output", OUTPUT_FILE_PATH);
-        HistoryHandle = LogBuffer->Create("Command History", NULL);
+        HistoryHandle = LogBuffer->Restore("Command History", HISTORY_FILE_PATH);
 
         OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
                 (FUNC_PTR)HookAPI->Relocate(OFFSET_console_vprint),
@@ -128,23 +127,6 @@ static void init_console() {
                 (FUNC_PTR)HookAPI->Relocate(OFFSET_console_run),
                 (FUNC_PTR)console_run
         );
-
-        fopen_s(&HistoryFile, HISTORY_FILE_PATH, "ab+");
-        ASSERT(HistoryFile != NULL);
-
-        //load history file from last session
-        fseek(HistoryFile, 0, SEEK_SET);
-        while (fgets(IOBuffer, sizeof(IOBuffer), HistoryFile)) {
-                for (uint32_t i = 0; i < sizeof(IOBuffer); ++i) {
-                        if (!IOBuffer[i]) break;
-                        if (IOBuffer[i] == '\n') {
-                                IOBuffer[i] = '\0';
-                                LogBuffer->Append(HistoryHandle, IOBuffer);
-                                break;
-                        }
-                }
-        }
-        HistoryIndex = LogBuffer->GetLineCount(HistoryHandle);
 
         IOBuffer[0] = 0;
 }
@@ -172,8 +154,6 @@ static void console_print(void* consolemgr, const char* fmt, va_list args) {
 
 static void console_run(void* consolemgr, char* cmd) {
         LogBuffer->Append(HistoryHandle, cmd);
-        fputs(cmd, HistoryFile);
-        fputc('\n', HistoryFile);
         OLD_ConsoleRun(consolemgr, cmd);
 }
 
@@ -202,7 +182,6 @@ static void draw_console_window(void* imgui_context) {
                         HistoryIndex = LogBuffer->GetLineCount(HistoryHandle);
                         console_run(NULL, IOBuffer);
                         IOBuffer[0] = 0;
-                        fflush(HistoryFile);
                         UpdateFocus = true;
                 }
                 //display_lines(OutputHandle);
@@ -217,7 +196,7 @@ static void draw_console_window(void* imgui_context) {
                                 }
                         }
                 }
-                display_search_lines(OutputHandle, SearchOutputLines);
+                SimpleDraw->ShowFilteredLogBuffer(OutputHandle, SearchOutputLines.data(), (uint32_t)SearchOutputLines.size(), UpdateScroll);
         }
         else if (CommandMode == InputMode::SearchHistory) {
                 if (ImGui::InputText("Search History", IOBuffer, sizeof(IOBuffer), ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_switch_mode)) {
@@ -228,7 +207,7 @@ static void draw_console_window(void* imgui_context) {
                                 }
                         }
                 }
-                display_search_lines(HistoryHandle, SearchHistoryLines);
+                SimpleDraw->ShowFilteredLogBuffer(HistoryHandle, SearchHistoryLines.data(), (uint32_t)SearchHistoryLines.size(), UpdateScroll);
         }
 
         UpdateScroll = false;
@@ -237,7 +216,7 @@ static void draw_console_window(void* imgui_context) {
 
 static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data) {
         if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {
-                const auto HistoryMax = LogBuffer->GetLineCount(HistoryHandle);
+                const auto HistoryMax = (int)LogBuffer->GetLineCount(HistoryHandle);
 
                 if (data->EventKey == ImGuiKey_UpArrow) {
                         --HistoryIndex;
@@ -292,31 +271,6 @@ static int CALLBACK_inputtext_switch_mode(ImGuiInputTextCallbackData* data) {
 }
 
 
-
-static void display_search_lines(LogBufferHandle handle, const std::vector<uint32_t>& lines) {
-        char temp_line[4096];
-        ImGui::BeginChild("scrolling region");
-        ImGuiListClipper clip{};
-        clip.Begin((int)lines.size());
-        while (clip.Step()) {
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{ 0.f, 2.f });
-                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0.f, 0.f });
-                for (auto i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
-                        ImGui::PushID(i);
-                        ImGui::SetNextItemWidth(-1.f);
-                        const char* cur_line = LogBuffer->GetLine(handle, lines[i]);
-                        strncpy_s(temp_line, sizeof(temp_line), cur_line, strlen(cur_line));
-                        ImGui::InputText("#buffer", temp_line, sizeof(temp_line), ImGuiInputTextFlags_ReadOnly);
-                        ImGui::PopID();
-                }
-                ImGui::PopStyleVar();
-                ImGui::PopStyleVar();
-        }
-        ImGui::TextUnformatted(" "); //more padding to fix scrolling at bottom
-        ImGui::EndChild();
-}
-
-
 static bool strcasestr(const char* s, const char* find) {
         char c, sc;
         size_t len;
@@ -334,8 +288,8 @@ static bool strcasestr(const char* s, const char* find) {
         return true;
 }
 
-
-
+static void DrawHotkeyTab(void* imgui);
+static boolean RunHotkey(uint32_t vk_keycode, boolean shift, boolean ctrl);
 
 // this should be the only interface between the console replacer and the mod menu code
 extern void setup_console(const BetterAPI* api) {
@@ -343,6 +297,65 @@ extern void setup_console(const BetterAPI* api) {
  
         callbacks.Name = "BetterConsole";
         callbacks.DrawTab = &draw_console_window;
+        callbacks.DrawSettings = &DrawHotkeyTab;
         api->Callback->RegisterDrawCallbacks(&callbacks);
+        api->Callback->RegisterHotkey("BetterConsole", RunHotkey);
         API = api;
+}
+
+
+#define HOTKEY_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleHotkeys.txt"
+struct HotkeyBuffer { char text[512]; };
+static HotkeyBuffer Hotkeys[12];
+static LogBufferHandle HotkeyHandle = 0;
+static bool hotkey_init = false;
+
+
+static void init_hotkeys() {
+        hotkey_init = true;
+        HotkeyHandle = LogBuffer->Restore("Hotkeys", HOTKEY_FILE_PATH);
+        LogBuffer->CloseFile(HotkeyHandle);
+        for (uint32_t i = 0; i < LogBuffer->GetLineCount(HotkeyHandle); ++i) {
+                if (i >= 12) break; //to many lines
+                const char* line = LogBuffer->GetLine(HotkeyHandle, i);
+                strncpy_s(Hotkeys[i].text, sizeof(Hotkeys[i].text), line, strlen(line));
+        }
+}
+
+
+static void DrawHotkeyTab(void* imgui) {
+        (void)imgui;
+        if (!ConsoleInit) init_console();
+        if (!hotkey_init) init_hotkeys();
+
+        if (ImGui::Button("Save to " HOTKEY_FILE_PATH)) {
+                LogBuffer->Clear(HotkeyHandle);
+                for (uint32_t i = 0; i < 12; ++i) {
+                        LogBuffer->Append(HotkeyHandle, Hotkeys[i].text);
+                }
+                LogBuffer->Save(HotkeyHandle, HOTKEY_FILE_PATH);
+        }
+
+        char label[32];
+        for (uint32_t i = 0; i < 12; ++i) {
+                ImGui::PushID(i);
+                snprintf(label, sizeof(label), "F%d", i + 13);
+                ImGui::InputText(label, Hotkeys[i].text, sizeof(Hotkeys[i].text));
+                ImGui::PopID();
+        }
+}
+
+static boolean RunHotkey(uint32_t vk_keycode, boolean shift, boolean ctrl) {
+        (void) shift;
+        (void) ctrl;
+
+        if (!ConsoleInit) init_console();
+        if (!hotkey_init) init_hotkeys();
+
+        if ((vk_keycode >= VK_NUMPAD0) && (vk_keycode <= VK_NUMPAD9)) {
+                uint32_t hotkey_index = vk_keycode - VK_NUMPAD0;
+                console_run(NULL, Hotkeys[hotkey_index].text);
+        }
+
+        return 0;
 }

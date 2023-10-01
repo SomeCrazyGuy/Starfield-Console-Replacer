@@ -29,7 +29,6 @@ static LogBufferHandle LogBufferCreate(const char* name, const char* path) {
 	return (LogBufferHandle)ret;
 }
 
-
 static const char* LogBufferGetName(LogBufferHandle handle) {
 	return Logs.at(handle).name;
 }
@@ -74,6 +73,53 @@ static void LogBufferAppend(LogBufferHandle handle, const char* line) {
 }
 
 
+static void LogBufferSave(LogBufferHandle handle, const char* filename) {
+	FILE* f = nullptr;
+	fopen_s(&f, filename, "wb");
+	if (f == nullptr) return;
+
+	for (uint32_t line = 0; line < LogBufferGetLineCount(handle); ++line) {
+		fputs(LogBufferGetLine(handle, line), f);
+		fputc('\n', f);
+	}
+	fclose(f);
+}
+
+
+// close the file handle for a logbuffer
+static void LogBufferCloseFile(LogBufferHandle handle) {
+	auto& l = Logs.at(handle);
+	if (!l.logfile) return;
+	fclose(l.logfile);
+	l.logfile = NULL;
+}
+
+
+static LogBufferHandle LogBufferRestore(const char* name, const char* filename) {
+	auto ret = LogBufferCreate(name, NULL);
+
+	char max_line[4096];
+	FILE* f = nullptr;
+
+	fopen_s(&f, filename, "r+b");
+	if (f == nullptr) return LogBufferCreate(name, filename);
+
+	while(fgets(max_line, sizeof(max_line), f)) {
+		auto end = strlen(max_line);
+		--end;
+		if (max_line[end] == '\n') {
+			max_line[end] = '\0';
+		}
+		LogBufferAppend(ret, max_line);
+	}
+	
+	// quick hack to add a file* to a log
+	Logs[ret].logfile = f;
+
+	return ret;
+}
+
+
 static constexpr struct log_buffer_api_t LogBufferAPI {
 	&LogBufferCreate,
 	&LogBufferGetName,
@@ -82,6 +128,9 @@ static constexpr struct log_buffer_api_t LogBufferAPI {
 	&LogBufferGetLine,
 	&LogBufferClear,
 	&LogBufferAppend,
+	&LogBufferSave,
+	&LogBufferRestore,
+	&LogBufferCloseFile
 };
 
 
