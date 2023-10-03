@@ -95,6 +95,29 @@ static void LogBufferCloseFile(LogBufferHandle handle) {
 }
 
 
+//todo: use this?
+static LogBufferHandle LogBufferReadAllLines(const char* name, const char* filename) {
+	auto ret = LogBufferCreate(name, NULL);
+
+	char max_line[4096];
+	FILE* f = nullptr;
+	fopen_s(&f, filename, "rb");
+	if (f == nullptr) return ret;
+
+	while (fgets(max_line, sizeof(max_line), f)) {
+		auto end = strlen(max_line);
+		--end;
+		if (max_line[end] == '\n') {
+			max_line[end] = '\0';
+		}
+		LogBufferAppend(ret, max_line);
+	}
+
+	fclose(f);
+	return ret;
+}
+
+
 static LogBufferHandle LogBufferRestore(const char* name, const char* filename) {
 	auto ret = LogBufferCreate(name, NULL);
 

@@ -10,6 +10,9 @@
 #include "console.h"
 #include "configfile.h"
 #include "settings_tab.h"
+#include "item_array.h"
+
+#include "internal_plugin.h"
 
 
 extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
@@ -40,18 +43,26 @@ static bool should_show_ui = false;
 static HWND window_handle = nullptr;
 
 
-static int HotkeyModifier = 0;
-static int ConsoleHotkey = VK_F1;
-static int FontScaleOverride = 0;
-
-
 //this is where the api* that all clients use comes from
 static const BetterAPI API {
         GetHookAPI(),
         GetLogBufferAPI(),
         GetSimpleDrawAPI(),
         GetCallbackAPI(),
+        GetItemArrayAPI(),
+        GetConfigAPI()
 };
+
+
+extern ModMenuSettings* GetSettingsMutable() {
+        static ModMenuSettings Settings;
+        return &Settings;
+}
+
+extern const ModMenuSettings* GetSettings() {
+        return GetSettingsMutable();
+}
+
 
 
 static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
@@ -185,11 +196,12 @@ static void HookDX12() {
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
         ASSERT(OLD_Present == NULL);
 
-        ReadConfigFile();
-        CONFIG_INT(ConsoleHotkey);
-        CONFIG_INT(HotkeyModifier);
-        CONFIG_INT(FontScaleOverride);
-        SaveConfigFile();
+#define CONFIG_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleConfig.txt"
+        API.Config->Load(CONFIG_FILE_PATH);
+        API.Config->BindInt(BIND_INT(GetSettingsMutable()->ConsoleHotkey));
+        API.Config->BindInt(BIND_INT(GetSettingsMutable()->HotkeyModifier));
+        API.Config->BindInt(BIND_INT(GetSettingsMutable()->FontScaleOverride));
+        API.Config->Save(CONFIG_FILE_PATH);
 
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;
@@ -198,16 +210,20 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
                 if (msg->type == MessageType_SFSE_PostPostLoad) {
                         HookDX12();
+
+                        // the modmenu UI is internally imlpemented using the plugin api, it gets coupled here
+                        RegisterInternalPlugin(&API);
+
                         MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, (void*) & API, sizeof(API), NULL);
+
+                        // The console part of better console is now minimally coupled to the mod menu
+                        setup_console(&API);
                 }
         };
 
         MyPluginHandle = sfse->GetPluginHandle();
         MessageInterface = (SFSEMessagingInterface*) sfse->QueryInterface(InterfaceID_Messaging);
         MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
-
-        // The console part of better console is now minimally coupled to the mod menu
-        setup_console(&API);
         
         // the game uses the rawinput interface to read keyboard and mouse events
         // if we hook that function we can disable input to the game when the imgui interface is open
@@ -377,8 +393,8 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         if (uMsg == WM_KEYDOWN) {
                 // built-in hotkey takes priority
-                if (wParam == ConsoleHotkey) {
-                        if ((HotkeyModifier == 0) || (GetKeyState(HotkeyModifier) < 0)) {
+                if (wParam == GetSettings()->ConsoleHotkey) {
+                        if ((GetSettings()->HotkeyModifier == 0) || (GetKeyState(GetSettings()->HotkeyModifier) < 0)) {
                                 should_show_ui = !should_show_ui;
                         }
                 }

@@ -6,6 +6,11 @@
 extern constexpr const struct callback_api_t* GetCallbackAPI();
 
 //internal api
+struct CallbackInfo {
+        const char* name;
+        FUNC_PTR callback;
+};
+
 extern const DrawCallbacks* GetCallbackHead();
 extern uint32_t GetHotkeyCount();
 extern HOTKEY_FUNC GetHotkeyFunc(uint32_t index);

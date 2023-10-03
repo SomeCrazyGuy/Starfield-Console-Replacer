@@ -33,7 +33,6 @@ static void RegisterHotkeyCallback(const char* name, HOTKEY_FUNC func) {
         HotKeys.push_back(HotkeyCallback{name, func});
 }
 
-
 static constexpr struct callback_api_t CallbackAPI{
         RegisterDrawCallbacks,
         RegisterHotkeyCallback

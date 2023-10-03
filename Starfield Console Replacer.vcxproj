@@ -170,6 +170,7 @@
     <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\gui.cpp" />
     <ClCompile Include="src\hook_api.cpp" />
+    <ClCompile Include="src\internal_plugin.cpp" />
     <ClCompile Include="src\item_array.cpp" />
     <ClCompile Include="src\log_buffer.cpp" />
     <ClCompile Include="src\main.cpp" />
@@ -192,6 +193,7 @@
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\gui.h" />
     <ClInclude Include="src\hook_api.h" />
+    <ClInclude Include="src\internal_plugin.h" />
     <ClInclude Include="src\item_array.h" />
     <ClInclude Include="src\log_buffer.h" />
     <ClInclude Include="src\main.h" />

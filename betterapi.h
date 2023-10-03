@@ -80,6 +80,21 @@ struct callback_api_t {
 };
 
 
+struct config_api_t {
+        // load the "key=value" pairs from file specified by filepath
+        void (*Load)(const char* filepath);
+
+        // Save all "key=value" pairs previously loaded
+        void (*Save)(const char* filepath);
+
+        // bind the int to the keyname "name"
+        // int must be heap allocated or statically allocated because the pointer
+        // to value is stored for a later call to Save() to save the current
+        // value without needing to explicity save_int(name, value)
+        void (*BindInt)(const char* name, int* value);
+};
+
+
 
 // This api deals with hooking functions and vtables
 struct hook_api_t {
@@ -127,7 +142,8 @@ struct simple_draw_t {
         // split the remainaing space into a left and right region
         // the left region occupies a left_size (eg: .5) fraction of the screen
         // the remaining space is reserved for the HBoxRight() side
-        void (*HboxLeft)(float left_size);
+        // min_size is a safety minimum number of pixels that hboxleft can be
+        void (*HboxLeft)(float left_size, float min_size);
 
         // the counterpart of HBoxLeft 
         // no argument needed, the size is the remaining space not taken up by hbox left
@@ -135,6 +151,16 @@ struct simple_draw_t {
 
         // needed to end hbox calculation
         void (*HBoxEnd)();
+
+        //this is the same as hbox, but for vertically separated spaces
+        void (*VboxTop)(float top_size, float min_size);
+        void (*VBoxBottom)();
+        void (*VBoxEnd)();
+
+
+        // retrieve the font size, useful for min_size calculation for the h/v box above
+        float (*CurrentFontSize)();
+
 
         // display an int number editor as a draggable slider that is aldo editable
         // min and max define the range of the *value
@@ -243,6 +269,7 @@ typedef struct better_api_t {
         const struct simple_draw_t* SimpleDraw;
         const struct callback_api_t* Callback;
         const struct item_array_api_t* ItemArray;
+        const struct config_api_t* Config;
 } BetterAPI;
 
 

@@ -3,25 +3,34 @@
 //for logapi
 #include "console.h"
 
+#include <string>
 #include <vector>
+#include <unordered_map>
+
+
+#define CONFIG_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleConfig.txt"
+
 
 //TODO: refactor config api and promote to betterapi.h
-
-
-#define CONFIG_FILE ".\\Data\\SFSE\\Plugins\\BetterConsoleConfig.txt"
-
-struct Config {
-        const char* key;
-        const char* value;
-        int* data;
+enum class ValueType : uint32_t {
+        VT_INT,
+        VT_STRING
 };
 
-static std::vector<Config> ConfigFile{};
+struct Value {
+        char* FileData; // Pointer to the character after the '=' in the config file
+        void* Data;     // Pointer to the bound datatype
+        ValueType Type; // Type of Data
+        uint32_t Size;  // Size of Data
+};
 
-//TODO: copy over assert code from other project
-extern void ReadConfigFile() {
+// A mapping of string keys to values
+std::unordered_map<std::string, Value> Settings;
+
+
+static void LoadConfig(const char* filename) {
         FILE* f = NULL;
-        fopen_s(&f, CONFIG_FILE, "rb");
+        fopen_s(&f, filename, "rb");
         if (!f) return;
 
         fseek(f, 0, SEEK_END);
@@ -35,68 +44,90 @@ extern void ReadConfigFile() {
         memset(&s[size], 0, 16);
         fclose(f);
 
+        //parse "key=value" pairs
+        for (uint32_t i = 0; i < size; ++i) {
+                //skip any whitespace at the beginning of the line
+                while (isspace(s[i])) continue;
 
-        //parse simple "key=value" config files
-        //TODO: not a real parser, cant handle lots of common formatting issues
-        Config c;
-        while (*s) {
-                c.key = NULL;
-                c.value = NULL;
-                c.data = 0;
+                
+                if (isalnum(s[i])) {
+                        //read identifier
+                        auto start = i;
+                        while (isalnum(s[i])) ++i;
+                        auto end = i;
 
-                while (*s == '\n') ++s;
-                if (!*s) break;
+                        //move identifier into string
+                        std::string key{&s[start], (end - start)};
 
-                //key
-                c.key = s;
+                        //skip until '='
+                        while (isspace(s[i])) ++i;
+                        ASSERT(s[i] == '=');
 
-                // = 
-                while (*s && (*s != '=')) ++s;
-                *s++ = '\0'; //overwrite '=' and null terminate key
+                        //init the value
+                        Value v{};
+                        v.FileData = &s[i];
 
-                //value
-                c.value = s;
-                while (*s && (*s != '\n')) ++s;
-                *s++ = '\0'; //overwrite '\n' and null terminate value
+                        //add setting to map
+                        Settings[key] = v;
 
-                ConfigFile.push_back(c);
+                        //skip until newline
+                        while (s[i] && (s[i] != '\n')) ++i;
+                        s[i] = '\0'; //add null terminator
+                }
         }
 }
 
 
+void BindConfigInt(const char* name, int* value) {
+        std::string key{name};
 
-//int* must be heap or statically allocated, will read it back for savefile
-extern void BindConfigInt(const char* name, int* value) {
+        auto& v = Settings[key];
+        ASSERT(v.Data == NULL); //cant bind data twice
 
-        //do dumb search, good enough for the couple values i have now
-        for (auto& x : ConfigFile) {
-                if (_strcmpi(name, x.key) == 0) {
-                        x.data = value; //bind
-                        *value = strtol(x.value, NULL, 0);
-                        return;
-                }
+        v.Data = (void*)value;
+        v.Type = ValueType::VT_INT;
+        
+        // if "name:category" was found, parse the value:
+        if (v.FileData) {
+                auto val = strtol(v.FileData, NULL, 0);
+                *value = (int)val;
         }
-
-        //create key if not found
-        Config c;
-        c.key = name;
-        c.data = value;
-        c.value = NULL;
-        ConfigFile.push_back(c);
 }
 
-extern void SaveConfigFile() {
-        FILE* f = NULL;
-        fopen_s(&f, CONFIG_FILE, "wb");
-        if (f == NULL) return;
 
-        for (const auto& x : ConfigFile) {
-                if (!x.key) { //no key means comment line
-                        fprintf(f, "%s\n", x.value);
-                } else if (x.data) { //only save lines that were bound to a value??
-                        fprintf(f, "%s=%d\n", x.key, *x.data);
+void SaveConfig(const char* filename) {
+        FILE* f = nullptr;
+        fopen_s(&f, filename, "wb");
+        ASSERT(f != nullptr);
+
+        for (const auto& x : Settings) {
+                const char* key = x.first.c_str();
+                const void* val = x.second.Data;
+
+                if (!val) {
+                        fprintf(f, "%s=%s\n", key, x.second.FileData);
+                        continue;
+                }
+
+                switch (x.second.Type) {
+                case ValueType::VT_INT:
+                        fprintf(f, "%s=%d\n", key, *(int*)val);
+                        break;
+                case ValueType::VT_STRING:
+                        fprintf(f, "%s=%s\n", key, (char*)val);
+                        break;
                 }
         }
-        fflush(f);
         fclose(f);
+}
+
+
+static constexpr struct config_api_t Config {
+        LoadConfig,
+        SaveConfig,
+        BindConfigInt,
+};
+
+extern const struct config_api_t* GetConfigAPI() {
+        return &Config;
 }

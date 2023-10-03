@@ -2,17 +2,6 @@
 
 #include "gui.h"
 
-
-static void draw_log_tab() {
-        ImGui::Text("TODO");
-}
-
-
-static void draw_setting_tab() {
-        ImGui::Text("TODO");
-}
-
-
 //linked list is too much pointer chasing
 //theory - mod menu can register its own draw callbacks...
 
@@ -32,15 +21,15 @@ extern void draw_gui() {
                 ImGui::SetNextWindowSize(ImVec2{ width, height });
 
                 //scale up the font based on 1920x1080 = 100%
-                float hf = height / 1080.f;
+                float hf = size.y / 1080.f;
                 if (hf > 1.f) {
                         FontScalePercent = (int)(hf * FontScalePercent);
                 }
 
                 //force font size based on fontscaleoverride parameter
-                //if (FontScaleOverride) {
-                //        FontScalePercent = FontScaleOverride;
-                //}
+                if (GetSettings()->FontScaleOverride) {
+                        FontScalePercent = GetSettings()->FontScaleOverride;
+                }
         }
 
         auto imgui_context = ImGui::GetCurrentContext();
@@ -49,10 +38,6 @@ extern void draw_gui() {
         ImGui::BeginTabBar("tab items");
         if (ImGui::BeginTabItem("Logs")) {
                 ImGui::BeginTabBar("log tabs");
-                if (ImGui::BeginTabItem("Mod Menu")) {
-                        draw_log_tab();
-                        ImGui::EndTabItem();
-                }
                 auto logs = GetCallbackHead();
                 while (logs) {
                         if (logs->DrawLog) {
@@ -70,10 +55,6 @@ extern void draw_gui() {
         }
         if (ImGui::BeginTabItem("Settings")) {
                 ImGui::BeginTabBar("settings tabs");
-                if (ImGui::BeginTabItem("Mod Menu")) {
-                        draw_setting_tab();
-                        ImGui::EndTabItem();
-                }
                 auto settings = GetCallbackHead();
                 while (settings) {
                         if (settings->DrawSettings) {
@@ -108,7 +89,9 @@ extern void draw_gui() {
         auto windows = GetCallbackHead();
         while (windows) {
                 if (windows->DrawWindow) {
+                        ImGui::Begin(windows->Name);
                         windows->DrawWindow(imgui_context);
+                        ImGui::End();
                 }
                 windows = windows->ll_next;
         }

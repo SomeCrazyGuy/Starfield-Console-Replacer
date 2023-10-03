@@ -33,15 +33,15 @@ static boolean simple_input_text(const char* name, char* buffer, uint32_t buffer
 }
 
 
-static void simple_hbox_left(float split) {
-        auto w = ImGui::GetContentRegionAvail().x;
+static void simple_hbox_left(float split, float min_size) {
+        auto size = ImGui::GetContentRegionAvail();
+        auto w = size.x * split;
+        w = (w < min_size) ? min_size : w;
 
         // weird code, i use the width available as the unique id 
         // because nested hboxes will only reduce available width and thus be unique
-        // multiplied by the largest 4 digit prime number because reasons
-        ImGui::PushID((int)(w * 9973));
-        ImGui::SetNextItemWidth(w * split);
-        ImGui::BeginChild("##hbox left");
+        ImGui::PushID((int)(size.x));
+        ImGui::BeginChild("##hbox left", ImVec2{ w, size.y });
 }
 
 
@@ -55,6 +55,32 @@ static void simple_hbox_end() {
         ImGui::EndChild();
         ImGui::PopID();
 }
+
+
+static void simple_vbox_top(float split, float min_size) {
+        auto size = ImGui::GetContentRegionAvail();
+        auto h = size.y * split;
+        h = (h < min_size) ? min_size : h;
+        ImGui::PushID((int)(size.y));
+        ImGui::BeginChild("##vbox top", ImVec2{ size.x, h });
+}
+
+
+static void simple_vbox_bottom() {
+        ImGui::EndChild();
+        ImGui::BeginChild("##vbox bottom");
+}
+
+static void simple_vbox_end() {
+        ImGui::EndChild();
+        ImGui::PopID();
+}
+
+
+static float simple_current_font_size() {
+        return ImGui::GetFontSize();
+}
+
 
 static boolean simple_drag_int(const char* name, int* value, int min, int max) {
         return ImGui::DragInt(name, value, 1.f, min, max);
@@ -115,6 +141,10 @@ static constexpr simple_draw_t SimpleDraw {
         simple_hbox_left,
         simple_hbox_right,
         simple_hbox_end,
+        simple_vbox_top,
+        simple_vbox_bottom,
+        simple_vbox_end,
+        simple_current_font_size,
         simple_drag_int,
         simple_drag_float,
         simple_render_log_buffer,

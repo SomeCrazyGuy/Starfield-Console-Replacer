@@ -79,3 +79,13 @@ static inline constexpr const char* GetRelativeProjectDir(const char* file_path)
 #define ASSERT(CONDITION) do{if(!(CONDITION)){FATAL_ERROR(#CONDITION);}}while(0)
 #define NOT_NULL(POINTER) ASSERT((POINTER) != NULL)
 
+
+
+struct ModMenuSettings {
+        int HotkeyModifier = 0;
+        int ConsoleHotkey = VK_F1;
+        int FontScaleOverride = 0;
+};
+
+extern const ModMenuSettings* GetSettings();
+extern ModMenuSettings* GetSettingsMutable();
