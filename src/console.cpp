@@ -337,7 +337,7 @@ static void DrawHotkeyTab(void* imgui) {
         }
 
         char label[32];
-        for (uint32_t i = 0; i < 12; ++i) {
+        for (uint32_t i = 0; i < 11; ++i) {
                 ImGui::PushID(i);
                 snprintf(label, sizeof(label), "F%d", i + 13);
                 ImGui::InputText(label, Hotkeys[i].text, sizeof(Hotkeys[i].text));
@@ -352,8 +352,11 @@ static boolean RunHotkey(uint32_t vk_keycode, boolean shift, boolean ctrl) {
         if (!ConsoleInit) init_console();
         if (!hotkey_init) init_hotkeys();
 
-        if ((vk_keycode >= VK_NUMPAD0) && (vk_keycode <= VK_NUMPAD9)) {
-                uint32_t hotkey_index = vk_keycode - VK_NUMPAD0;
+        const auto VKStart = VK_F13;
+        const auto VKEnd = VK_F23;
+
+        if ((vk_keycode >= VKStart) && (vk_keycode <= VKEnd)) {
+                uint32_t hotkey_index = vk_keycode - VKStart;
                 console_run(NULL, Hotkeys[hotkey_index].text);
                 return true;
         }
@@ -384,7 +387,7 @@ static void DrawTestLog(void* imgui) {
         SimpleDraw->Text("Middle Left");
         SimpleDraw->HBoxRight();
         SimpleDraw->HboxLeft(1.0 / 2, 0);
-        SimpleDraw->Text("Middle Center");
+        SimpleDraw->Text("Layout Test Code");
         SimpleDraw->HBoxRight();
         SimpleDraw->Text("Middle Right");
         SimpleDraw->HBoxEnd();

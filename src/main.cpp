@@ -12,6 +12,9 @@
 #include "settings_tab.h"
 #include "item_array.h"
 
+
+#include "randomizer.h"
+
 #include "internal_plugin.h"
 
 
@@ -196,12 +199,17 @@ static void HookDX12() {
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
         ASSERT(OLD_Present == NULL);
 
+       
 #define CONFIG_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleConfig.txt"
         API.Config->Load(CONFIG_FILE_PATH);
         API.Config->BindInt(BIND_INT(GetSettingsMutable()->ConsoleHotkey));
         API.Config->BindInt(BIND_INT(GetSettingsMutable()->HotkeyModifier));
         API.Config->BindInt(BIND_INT(GetSettingsMutable()->FontScaleOverride));
         API.Config->Save(CONFIG_FILE_PATH);
+       
+        
+        LOG("Here!");
+        
 
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;
@@ -218,6 +226,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 
                         // The console part of better console is now minimally coupled to the mod menu
                         setup_console(&API);
+                        RegisterRandomizer(&API);
                 }
         };
 
@@ -239,7 +248,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                 
                 //hide input from the game when shouldshowui is true and data is not null
                 auto input = (RAWINPUT*)data;
-                input->header.dwType = RIM_TYPEHID;
+                input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
                 return ret;
         };
         OLD_GetRawInputData = (decltype(OLD_GetRawInputData))API.Hook->HookFunction(fun_get_rawinput, (FUNC_PTR) FAKE_GetRawInputData);
@@ -253,14 +262,9 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                         if (rect == NULL) {
                                 return OLD_ClipCursor(NULL);
                         }
-                        else {
-                                //dont waste cpu calling real clipcursor when should_show_ui
-                                return TRUE;
-                        }
+                        return true;
                 }
-                else {
-                        return OLD_ClipCursor(rect);
-                }
+                return OLD_ClipCursor(rect);
         };
         OLD_ClipCursor = (decltype(OLD_ClipCursor))API.Hook->HookFunction(fun_clip_cursor, (FUNC_PTR)FAKE_ClipCursor);
 }

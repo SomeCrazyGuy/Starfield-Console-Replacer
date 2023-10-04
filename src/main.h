@@ -10,6 +10,30 @@
 #define BETTERAPI_ENABLE_SFSE_MINIMAL
 #include "../betterapi.h"
 
+
+// adding heavy debugging asserts until crashes are fixed
+static inline constexpr const char* GetRelativeProjectDir(const char* file_path) noexcept {
+        if (!file_path) return nullptr;
+        const char* x = file_path;
+        while (*x) ++x;
+        while ((x != file_path) && (*x != '\\')) --x;
+        --x;
+        while ((x != file_path) && (*x != '\\')) --x;
+        ++x;
+        return x;
+}
+
+#define HERE_MSG(BUFFER, BUFFER_SIZE) do{snprintf((BUFFER), (BUFFER_SIZE), "[ERROR] %s:%s:%d:", GetRelativeProjectDir(__FILE__), __func__, __LINE__);}while(0)
+#define FATAL_ERROR(FORMAT) do{char msg[1024]; HERE_MSG(msg, 256); snprintf(msg+strlen(msg), 768, " " FORMAT); MessageBoxA(NULL, msg, "Fatal Error", 0); abort(); }while(0)
+#define ASSERT(CONDITION) do{if(!(CONDITION)){FATAL_ERROR(#CONDITION);}}while(0)
+#define NOT_NULL(POINTER) ASSERT((POINTER) != NULL)
+
+
+// This is defined in internal_plugin.cpp, but needs to be used everywhere
+extern void Log(const char* file, const char* func, const int line, const char* fmt, ...);
+#define LOG(...) do { Log(GetRelativeProjectDir(__FILE__), __func__, __LINE__, " " __VA_ARGS__); } while(0)
+
+
 #include "callback.h"
 #include "hook_api.h"
 #include "simpledraw.h"
@@ -62,22 +86,7 @@ constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 7, 33);
 //---------------------------------------------------------------------------------------------
 
 
-// adding heavy debugging asserts until crashes are fixed
-static inline constexpr const char* GetRelativeProjectDir(const char* file_path) noexcept {
-        if (!file_path) return nullptr;
-        const char* x = file_path;
-        while (*x) ++x;
-        while ((x != file_path) && (*x != '\\')) --x;
-        --x;
-        while ((x != file_path) && (*x != '\\')) --x;
-        ++x;
-        return x;
-}
 
-#define HERE_MSG(BUFFER, BUFFER_SIZE) do{snprintf((BUFFER), (BUFFER_SIZE), "[ERROR] %s:%s:%d:", GetRelativeProjectDir(__FILE__), __func__, __LINE__);}while(0)
-#define FATAL_ERROR(FORMAT) do{char msg[1024]; HERE_MSG(msg, 256); snprintf(msg+strlen(msg), 768, " " FORMAT); MessageBoxA(NULL, msg, "Fatal Error", 0); abort(); }while(0)
-#define ASSERT(CONDITION) do{if(!(CONDITION)){FATAL_ERROR(#CONDITION);}}while(0)
-#define NOT_NULL(POINTER) ASSERT((POINTER) != NULL)
 
 
 

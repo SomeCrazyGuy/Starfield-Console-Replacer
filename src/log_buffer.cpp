@@ -1,5 +1,7 @@
 #include "log_buffer.h"
 
+#include "main.h"
+
 #include <cstring>
 
 #include <string>
@@ -30,22 +32,26 @@ static LogBufferHandle LogBufferCreate(const char* name, const char* path) {
 }
 
 static const char* LogBufferGetName(LogBufferHandle handle) {
-	return Logs.at(handle).name;
+	ASSERT(handle < Logs.size());
+	return Logs[handle].name;
 }
 
 
 static uint32_t LogBufferGetSize(LogBufferHandle handle) {
-	return (uint32_t)Logs.at(handle).buffer.size();
+	ASSERT(handle < Logs.size());
+	return (uint32_t)Logs[handle].buffer.size();
 }
 
 
 static uint32_t LogBufferGetLineCount(LogBufferHandle handle) {
-	return (uint32_t)Logs.at(handle).lines.size();
+	ASSERT(handle < Logs.size());
+	return (uint32_t)Logs[handle].lines.size();
 }
 
 
 static const char* LogBufferGetLine(LogBufferHandle handle, uint32_t line) {
-	const auto& l = Logs.at(handle);
+	ASSERT(handle < Logs.size());
+	const auto& l = Logs[handle];
 	const auto offset = l.lines.at(line);
 	const auto len = l.buffer.size();
 	if (len <= offset) return "";
@@ -54,14 +60,16 @@ static const char* LogBufferGetLine(LogBufferHandle handle, uint32_t line) {
 
 
 static void LogBufferClear(LogBufferHandle handle) {
-	auto& log = Logs.at(handle);
+	ASSERT(handle < Logs.size());
+	auto& log = Logs[handle];
 	log.lines.clear();
 	log.buffer.clear();
 }
 
 
 static void LogBufferAppend(LogBufferHandle handle, const char* line) {
-	auto& l = Logs.at(handle);
+	ASSERT(handle < Logs.size());
+	auto& l = Logs[handle];
 	auto offset = l.buffer.size();
 	l.buffer.append(line);
 	l.buffer += '\0';
@@ -74,6 +82,7 @@ static void LogBufferAppend(LogBufferHandle handle, const char* line) {
 
 
 static void LogBufferSave(LogBufferHandle handle, const char* filename) {
+	ASSERT(handle < Logs.size());
 	FILE* f = nullptr;
 	fopen_s(&f, filename, "wb");
 	if (f == nullptr) return;
@@ -88,7 +97,8 @@ static void LogBufferSave(LogBufferHandle handle, const char* filename) {
 
 // close the file handle for a logbuffer
 static void LogBufferCloseFile(LogBufferHandle handle) {
-	auto& l = Logs.at(handle);
+	ASSERT(handle < Logs.size());
+	auto& l = Logs[handle];
 	if (!l.logfile) return;
 	fclose(l.logfile);
 	l.logfile = NULL;

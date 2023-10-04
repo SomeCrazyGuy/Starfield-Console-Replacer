@@ -62,6 +62,7 @@ static void LoadConfig(const char* filename) {
                         //skip until '='
                         while (isspace(s[i])) ++i;
                         ASSERT(s[i] == '=');
+                        ++i; //move beyond the '='
 
                         //init the value
                         Value v{};
@@ -69,10 +70,12 @@ static void LoadConfig(const char* filename) {
 
                         //add setting to map
                         Settings[key] = v;
-
+                        
                         //skip until newline
                         while (s[i] && (s[i] != '\n')) ++i;
                         s[i] = '\0'; //add null terminator
+
+                        LOG("Key (%s) = Value (%s)", key.c_str(), v.FileData);
                 }
         }
 }
@@ -90,6 +93,7 @@ void BindConfigInt(const char* name, int* value) {
         // if "name:category" was found, parse the value:
         if (v.FileData) {
                 auto val = strtol(v.FileData, NULL, 0);
+                LOG("Val: %ld", val);
                 *value = (int)val;
         }
 }
@@ -105,15 +109,18 @@ void SaveConfig(const char* filename) {
                 const void* val = x.second.Data;
 
                 if (!val) {
+                        LOG("Fallback Save (%s)", key);
                         fprintf(f, "%s=%s\n", key, x.second.FileData);
                         continue;
                 }
 
                 switch (x.second.Type) {
                 case ValueType::VT_INT:
+                        LOG("Save key (%s) as INT (%d)", key, *(int*)val);
                         fprintf(f, "%s=%d\n", key, *(int*)val);
                         break;
                 case ValueType::VT_STRING:
+                        LOG("Save Key (%s) as STRING (%s)", key, (const char*)val);
                         fprintf(f, "%s=%s\n", key, (char*)val);
                         break;
                 }
