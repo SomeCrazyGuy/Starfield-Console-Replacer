@@ -75,7 +75,7 @@ extern void Log(const char* file, const char* func, const int line, const char* 
 // --------------------------------------------------------------------
 // ---- Change these offsets for each game update, need signatures ----
 // --------------------------------------------------------------------
-constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 7, 33);
+constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 7, 36);
 
 
 

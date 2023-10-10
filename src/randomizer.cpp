@@ -24,7 +24,7 @@ memset(local_c38,0,0x400);
 pcVar15 = "float fresult\nref refr\nset refr to GetSelectedRef\nset fresult to ";
 
 */
-constexpr uint64_t OFFSET_console_run = 0x2881064; //void ConsoleRun(NULL, char* cmd)
+constexpr uint64_t OFFSET_console_run = 0x28814a4; //void ConsoleRun(NULL, char* cmd)
 
 
 
@@ -193,7 +193,7 @@ static boolean FilterHotkey(uint32_t vk, boolean shift, boolean ctrl) {
         (void)shift;
         (void)ctrl;
 
-        if (vk == VK_F24) {
+        if (vk == VK_NUMPAD0) {
                 RunRandomCommand();
                 return true;
         }

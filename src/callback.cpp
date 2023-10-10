@@ -14,6 +14,8 @@ struct HotkeyCallback {
 
 static std::vector<HotkeyCallback> HotKeys{};
 
+static std::vector<FUNC_PTR> EveryFrame{};
+
 static void RegisterDrawCallbacks(DrawCallbacks* callbacks) {
         callbacks->ll_next = nullptr;
 
@@ -33,9 +35,14 @@ static void RegisterHotkeyCallback(const char* name, HOTKEY_FUNC func) {
         HotKeys.push_back(HotkeyCallback{name, func});
 }
 
+static void RegisterEveryFrameCallback(FUNC_PTR func) {
+        EveryFrame.push_back(func);
+}
+
 static constexpr struct callback_api_t CallbackAPI{
         RegisterDrawCallbacks,
-        RegisterHotkeyCallback
+        RegisterHotkeyCallback,
+        RegisterEveryFrameCallback
 };
 
 extern constexpr const struct callback_api_t* GetCallbackAPI() {
@@ -53,4 +60,13 @@ extern uint32_t GetHotkeyCount() {
 extern HOTKEY_FUNC GetHotkeyFunc(uint32_t index) {
         ASSERT(index < HotKeys.size());
         return HotKeys[index].callback;
+}
+
+extern uint32_t GetEveryFrameCallbackCount() {
+        return (uint32_t)EveryFrame.size();
+}
+
+extern FUNC_PTR GetEveryFrameCallback(uint32_t index) {
+        ASSERT(index < EveryFrame.size());
+        return EveryFrame[index];
 }

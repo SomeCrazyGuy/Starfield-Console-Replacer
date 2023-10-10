@@ -201,14 +201,15 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 
        
 #define CONFIG_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleConfig.txt"
-        API.Config->Load(CONFIG_FILE_PATH);
-        API.Config->BindInt(BIND_INT(GetSettingsMutable()->ConsoleHotkey));
-        API.Config->BindInt(BIND_INT(GetSettingsMutable()->HotkeyModifier));
-        API.Config->BindInt(BIND_INT(GetSettingsMutable()->FontScaleOverride));
-        API.Config->Save(CONFIG_FILE_PATH);
-       
-        
-        LOG("Here!");
+        {
+                auto s = GetSettingsMutable();
+                API.Config->Load(CONFIG_FILE_PATH);
+                API.Config->BindInt(BIND_INT(s->ConsoleHotkey));
+                API.Config->BindInt(BIND_INT(s->HotkeyModifier));
+                API.Config->BindInt(BIND_INT(s->FontScaleOverride));
+                API.Config->Save(CONFIG_FILE_PATH);
+        }
+#undef CONFIG_FILE_PATH
         
 
         static PluginHandle MyPluginHandle;
@@ -288,7 +289,6 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         static ImGuiContext* imgui_context = nullptr;
         static unsigned once = 1;
         
-
         //once = 0;
         if (once) {
                 once = 0;
@@ -306,6 +306,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 OLD_Wndproc = (decltype(OLD_Wndproc))SetWindowLongPtrW(window_handle, GWLP_WNDPROC, (LONG_PTR)FAKE_Wndproc);
 
                 This->GetDevice(IID_PPV_ARGS(&d3d12Device));
+                ASSERT(d3d12Device != NULL);
 
                 buffersCounts = sdesc.BufferCount;
                 frameContext = (FrameContext*)calloc(buffersCounts, sizeof(FrameContext));
@@ -319,6 +320,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
                 ID3D12CommandAllocator* allocator;
                 d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator));
+                ASSERT(allocator != NULL);
                 for (size_t i = 0; i < buffersCounts; i++) {
                         frameContext[i].commandAllocator = allocator;
                 }
@@ -390,6 +392,12 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 d3d12CommandQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList* const*>(&d3d12CommandList));
         }
 
+        // just when you though we were done loading down the main render thread...
+        const auto cb_count = GetEveryFrameCallbackCount();
+        for (uint32_t i = 0; i < cb_count; ++i) {
+                GetEveryFrameCallback(i)();
+        }
+
         return OLD_Present(This, SyncInterval, PresentFlags);
 }
 
@@ -398,7 +406,8 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (uMsg == WM_KEYDOWN) {
                 // built-in hotkey takes priority
                 if (wParam == GetSettings()->ConsoleHotkey) {
-                        if ((GetSettings()->HotkeyModifier == 0) || (GetKeyState(GetSettings()->HotkeyModifier) < 0)) {
+                        const auto modifier = GetSettings()->HotkeyModifier;
+                        if ((modifier == 0) || (GetKeyState(modifier) < 0)) {
                                 should_show_ui = !should_show_ui;
                         }
                 }

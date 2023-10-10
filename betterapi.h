@@ -77,6 +77,7 @@ typedef struct draw_callbacks_t {
 struct callback_api_t {
         void (*RegisterDrawCallbacks)(DrawCallbacks* draw_callbacks);
         void (*RegisterHotkey)(const char* name, HOTKEY_FUNC func);
+        void (*RegisterEveryFrameCallabck)(FUNC_PTR func);
 };
 
 
