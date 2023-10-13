@@ -1,5 +1,4 @@
 #include "main.h"
-
 #include "gui.h"
 
 //linked list is too much pointer chasing

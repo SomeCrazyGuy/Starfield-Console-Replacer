@@ -1,3 +1,8 @@
+#define BETTERAPI_ENABLE_ASSERTIONS
+#define BETTERAPI_ENABLE_STD
+
+
+
 #ifndef BETTERAPI_API_H
 #define BETTERAPI_API_H
 
@@ -222,36 +227,6 @@ struct log_buffer_api_t {
 };
 
 
-struct item_array_api_t {
-        // create a new item array using element_size elements
-        ItemArrayHandle (*Create)(const char* name, uint32_t element_size);
-
-        // Retrieve the mane of the itemarray
-        const char* (*Name)(ItemArrayHandle handle);
-
-        // get the count of elements in the array
-        uint32_t (*Count)(ItemArrayHandle handle);
-
-        // get a pointer to the raw data
-        void* (*Data)(ItemArrayHandle handle);
-
-        // Retrieve a specific item from the array
-        void* (*At)(ItemArrayHandle handle, uint32_t index);
-
-        // copy an item into the item array
-        void (*PushBack)(ItemArrayHandle handle, const void* element);
-
-        // Append an array of items into the item array
-        void (*Append) (ItemArrayHandle handle, const void* elements, uint32_t count);
-
-        // Clear the elements of an item array
-        void (*Clear) (ItemArrayHandle handle);
-
-        // Free the memory associated with an item array
-        void (*Free)(ItemArrayHandle);
-};
-
-
 // This is all the above struct wrapped up in one place
 // why pointers to apis instead of the api itself? so that
 // I may extend any api without changing the size of BetterAPI
@@ -269,13 +244,117 @@ typedef struct better_api_t {
         const struct log_buffer_api_t* LogBuffer;
         const struct simple_draw_t* SimpleDraw;
         const struct callback_api_t* Callback;
-        const struct item_array_api_t* ItemArray;
         const struct config_api_t* Config;
 } BetterAPI;
 
+#ifdef BETTERAPI_ENABLE_ASSERTIONS
+#include <stdio.h>
+#include <Windows.h>
+#define ASSERT(X) do { if((X)) break; char msg[1024]; snprintf(msg, sizeof(msg), "FILE: %s\nFUNC: %s:%u\n%s", __FILE__, __func__, __LINE__, #X); MessageBoxA(NULL, msg, "Assertion Failure", 0); exit(EXIT_FAILURE); }while(0)
+#else
+#define ASSERT(X) do {} while(0)
+#endif // BETTERAPI_ENABLE_ASSERTIONS
 
 
 #endif // !BETTERAPI_API_H
+
+
+#ifdef BETTERAPI_ENABLE_STD
+#ifndef BETTERAPI_STD
+#define BETTERAPI_STD
+
+#include <stdio.h>
+#include <stdlib.h>
+
+//TODO: port this over to size_t again
+
+typedef struct item_array_t {
+        char* data;
+        uint32_t count;
+        uint32_t capacity;
+        uint32_t element_size;
+} ItemArray;
+
+
+inline static ItemArray ItemArray_Create(uint32_t element_size) {
+        ASSERT(element_size > 0);
+        ItemArray ret = {};
+        ret.element_size = element_size;
+        return ret;
+}
+
+
+inline static void ItemArray_Clear(ItemArray* items) {
+        ASSERT(items != NULL);
+        ASSERT(items->element_size != 0);
+        items->count = 0;
+}
+
+
+inline static uint32_t ItemArray_Count(ItemArray* items) {
+        ASSERT(items != NULL);
+        ASSERT(items->element_size != 0);
+        return items->count;
+}
+
+
+inline static void ItemArray_Free(ItemArray* items) {
+        ASSERT(items != NULL);
+        ASSERT(items->element_size != 0);
+        free(items->data);
+        items->count = 0;
+        items->data = NULL;
+}
+
+
+inline static void* ItemArray_At(ItemArray* items, uint32_t index) {
+        ASSERT(items != NULL);
+        ASSERT(items->element_size != 0);
+        ASSERT(items->data != NULL);
+        ASSERT(items->count > index);
+        return (void*)(items->data + (items->element_size * index));
+}
+
+
+inline static void ItemArray_Append(ItemArray* items, void* items_array, uint32_t items_count) {
+        ASSERT(items != NULL);
+        ASSERT(items->element_size != 0);
+        ASSERT(items->count > 0);
+
+        uint32_t capacity_needed = items_count + items->count;
+
+        if (capacity_needed > items->capacity) {
+                uint32_t n = capacity_needed;
+
+                /* find the power of 2 larger than n for a 32-bit n */
+                n--;
+                n |= n >> 1;
+                n |= n >> 2;
+                n |= n >> 4;
+                n |= n >> 8;
+                n |= n >> 16;
+                n++;
+
+                ASSERT(n > items->capacity);
+                items->data = (char*)realloc(items->data, n);
+                ASSERT(items->data != NULL);
+
+                items->capacity = n;
+        }
+
+        char* end = (items->data + (items->element_size * items->count));
+        items->count += items_count;
+        memcpy(end, items_array, (items->element_size * items_count));
+}
+
+
+inline static void ItemArray_PushBack(ItemArray* items, void* item) {
+        ItemArray_Append(items, item, 1);
+}
+#endif // !BETTERAPI_STD
+#endif //BETTERAPI_ENABLE_STD
+
+
 
 
 // For people that want to port Cheat Engine or ASI mods to sfse without including sfse code into the project,

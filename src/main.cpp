@@ -10,7 +10,6 @@
 #include "console.h"
 #include "configfile.h"
 #include "settings_tab.h"
-#include "item_array.h"
 
 
 #include "randomizer.h"
@@ -52,7 +51,6 @@ static const BetterAPI API {
         GetLogBufferAPI(),
         GetSimpleDrawAPI(),
         GetCallbackAPI(),
-        GetItemArrayAPI(),
         GetConfigAPI()
 };
 

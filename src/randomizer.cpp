@@ -49,24 +49,6 @@ static bool WeightsAreProcessed = false;
 
 
 
-//copying these from main.h to test console code running completely isolated from the rest of the modmenu
-static inline constexpr const char* GetRelativeProjectDir(const char* file_path) noexcept {
-        if (!file_path) return nullptr;
-        const char* x = file_path;
-        while (*x) ++x;
-        while ((x != file_path) && (*x != '\\')) --x;
-        --x;
-        while ((x != file_path) && (*x != '\\')) --x;
-        ++x;
-        return x;
-}
-
-#define HERE_MSG(BUFFER, BUFFER_SIZE) do{snprintf((BUFFER), (BUFFER_SIZE), "[ERROR] %s:%s:%d:", GetRelativeProjectDir(__FILE__), __func__, __LINE__);}while(0)
-#define FATAL_ERROR(FORMAT) do{char msg[1024]; HERE_MSG(msg, 256); snprintf(msg+strlen(msg), 768, " " FORMAT); MessageBoxA(NULL, msg, "Fatal Error", 0); abort(); }while(0)
-#define ASSERT(CONDITION) do{if(!(CONDITION)){FATAL_ERROR(#CONDITION);}}while(0)
-#define NOT_NULL(POINTER) ASSERT((POINTER) != NULL)
-
-
 #define RANDOMIZER_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleRandomizer.bin"
 
 const struct hook_api_t* HookAPI = nullptr;
@@ -193,7 +175,7 @@ static boolean FilterHotkey(uint32_t vk, boolean shift, boolean ctrl) {
         (void)shift;
         (void)ctrl;
 
-        if (vk == VK_NUMPAD0) {
+        if (vk == VK_F24) {
                 RunRandomCommand();
                 return true;
         }
