@@ -96,6 +96,7 @@ struct config_api_t {
         /// Called first to allocate internal structures for your settings.
         /// The handle is invalidated by the next call to Load() from any mod (do not save the handle)
         /// Usually you would bind all settings from the same function that loads them
+        /// `mod_name` should be unique, all your settings are namespaced with `mod_name` to prevent name collisions.
         /// </summary>
         SettingsHandle (*Load)(const char* mod_name);
 

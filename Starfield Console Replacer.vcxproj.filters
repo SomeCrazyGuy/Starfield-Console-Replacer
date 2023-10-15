@@ -53,13 +53,7 @@
     <ClCompile Include="src\callback.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\configfile.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\log_buffer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\settings_tab.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\gui.cpp">
@@ -121,13 +115,7 @@
     <ClInclude Include="src\callback.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\configfile.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\log_buffer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\settings_tab.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\gui.h">

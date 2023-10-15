@@ -70,3 +70,22 @@ extern FUNC_PTR GetEveryFrameCallback(uint32_t index) {
         ASSERT(index < EveryFrame.size());
         return EveryFrame[index];
 }
+
+
+// TODO: reimplement the callback infastructure once settings and log tabs are generated automatically
+// ie RegisterPluginLog(LogBufferHandle, filename)
+// and the bindsettings interface
+
+/*
+
+callback types:
+        tab
+        window,
+        overlay
+
+allow plugins to register all 3?
+
+
+extern FUNC_PTR* GetCallbackArray(callback_type, &callback_count)
+
+*/

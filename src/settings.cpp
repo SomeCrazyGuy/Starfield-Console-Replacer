@@ -109,7 +109,11 @@ static void BindSettingInt(SettingsHandle handle, const char* name, int* value, 
         s.max.as_int = max_value;
         Settings.push_back(s);
 
-        auto find = Registry.find(std::string{name});
+        std::string key = name;
+        key += ':';
+        key += Handles[handle];
+
+        auto find = Registry.find(key);
         if (find == Registry.end()) return;
         *value = (int)strtol(find->second.c_str(), NULL, 0);
 }
@@ -131,7 +135,11 @@ static void BindSettingFloat(SettingsHandle handle, const char* name, float* val
         s.max.as_float = max_value;
         Settings.push_back(s);
 
-        auto find = Registry.find(std::string{name});
+        std::string key = name;
+        key += ':';
+        key += Handles[handle];
+
+        auto find = Registry.find(key);
         if (find == Registry.end()) return;
         *value = strtof(find->second.c_str(), NULL);
 }
@@ -151,7 +159,11 @@ static void BindSettingBoolean(SettingsHandle handle, const char* name, boolean*
         s.type = SettingType::Boolean;
         Settings.push_back(s);
 
-        auto find = Registry.find(std::string{name});
+        std::string key = name;
+        key += ':';
+        key += Handles[handle];
+
+        auto find = Registry.find(key);
         if (find == Registry.end()) return;
         *value = (0 == strcmp(find->second.c_str(), "true"));
 }
@@ -173,7 +185,11 @@ static void BindSettingString(SettingsHandle handle, const char* name, char* val
 
         Settings.push_back(s);
 
-        auto find = Registry.find(std::string{name});
+        std::string key = name;
+        key += ':';
+        key += Handles[handle];
+
+        auto find = Registry.find(key);
         if (find == Registry.end()) return;
         const char* str = find->second.c_str();
 
@@ -255,21 +271,26 @@ extern void SaveSettingsRegistry() {
         if (f == NULL) return;
 
         for (const auto& s : Settings) {
+                std::string key = s.name;
+                key += ':';
+                key += Handles[s.handle];
+
+
                 switch (s.type) {
                 case SettingType::Undefined:
                         ASSERT(false && "Unreachable!");
                         break;
                 case SettingType::Integer:
-                        fprintf(f, "%s=%d\n", s.name, *s.value.as_int);
+                        fprintf(f, "%s=%d\n", key.c_str(), *s.value.as_int);
                         break;
                 case SettingType::Float:
-                        fprintf(f, "%s=%f\n", s.name, *s.value.as_float);
+                        fprintf(f, "%s=%f\n", key.c_str(), *s.value.as_float);
                         break;
                 case SettingType::Boolean:
-                        fprintf(f, "%s=%s\n", s.name, (*s.value.as_boolean) ? "true" : "false");
+                        fprintf(f, "%s=%s\n", key.c_str(), (*s.value.as_boolean) ? "true" : "false");
                         break;
                 case SettingType::String:
-                        fprintf(f, "%s=\"%s\"\n", s.name, s.value.as_string);
+                        fprintf(f, "%s=\"%s\"\n", key.c_str(), s.value.as_string);
                         break;
                 case SettingType::Data:
                         ASSERT(false && "Unimplemented!");

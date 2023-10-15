@@ -166,7 +166,6 @@
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="src\callback.cpp" />
-    <ClCompile Include="src\configfile.cpp" />
     <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\gui.cpp" />
     <ClCompile Include="src\hook_api.cpp" />
@@ -175,7 +174,6 @@
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\randomizer.cpp" />
     <ClCompile Include="src\settings.cpp" />
-    <ClCompile Include="src\settings_tab.cpp" />
     <ClCompile Include="src\simpledraw.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -190,7 +188,6 @@
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="minhook\MinHook.h" />
     <ClInclude Include="src\callback.h" />
-    <ClInclude Include="src\configfile.h" />
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\gui.h" />
     <ClInclude Include="src\hook_api.h" />
@@ -200,7 +197,6 @@
     <ClInclude Include="src\main.h" />
     <ClInclude Include="src\randomizer.h" />
     <ClInclude Include="src\settings.h" />
-    <ClInclude Include="src\settings_tab.h" />
     <ClInclude Include="src\simpledraw.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

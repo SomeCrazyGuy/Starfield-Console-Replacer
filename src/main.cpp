@@ -9,7 +9,6 @@
 #include "gui.h"
 #include "console.h"
 #include "settings.h"
-#include "settings_tab.h"
 
 
 #include "randomizer.h"
@@ -201,14 +200,13 @@ inline constexpr const char* member_name_only(const char* in) {
         while (
                 ((*in >= 'a') && (*in <= 'z')) ||
                 ((*in >= '0') && (*in <= '9')) ||
-                ((*in >= 'A') && (*in <= 'Z')) ||
-                (*in == ':')
-                ) --in;
+                ((*in >= 'A') && (*in <= 'Z'))
+              ) --in;
         ++in;
         return in;
 }
 
-#define BIND_INT_DEFAULT(HANDLE, INT_PTR) HANDLE, member_name_only(#INT_PTR ":internal"), &INT_PTR, 0, 0, NULL
+#define BIND_INT_DEFAULT(HANDLE, INT_PTR) HANDLE, member_name_only(#INT_PTR), &INT_PTR, 0, 0, NULL
 
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
@@ -216,7 +214,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 
         {
                 auto s = GetSettingsMutable();
-                auto h = API.Config->Load("(internal)");
+                auto h = API.Config->Load("internal");
                 API.Config->BindInt(BIND_INT_DEFAULT(h, s->ConsoleHotkey));
                 API.Config->BindInt(BIND_INT_DEFAULT(h, s->FontScaleOverride));
                 API.Config->BindInt(BIND_INT_DEFAULT(h, s->HotkeyModifier));
@@ -233,7 +231,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                         // the modmenu UI is internally imlpemented using the plugin api, it gets coupled here
                         RegisterInternalPlugin(&API);
 
-                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, (void*) & API, sizeof(API), NULL);
+                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, (void*) &API, sizeof(API), NULL);
 
                         // The console part of better console is now minimally coupled to the mod menu
                         setup_console(&API);
@@ -269,10 +267,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         static BOOL(*OLD_ClipCursor)(const RECT*) = nullptr;
         static decltype(OLD_ClipCursor) FAKE_ClipCursor = [](const RECT* rect) -> BOOL {
                 // When the imgui window is open only pass through clipcursor(NULL);
-                if (should_show_ui) {
-                        if (rect == NULL) {
-                                return OLD_ClipCursor(NULL);
-                        }
+                if (should_show_ui && (rect != NULL)) {
                         return true;
                 }
                 return OLD_ClipCursor(rect);
