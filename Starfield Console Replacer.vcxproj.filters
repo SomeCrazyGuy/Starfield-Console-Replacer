@@ -127,9 +127,6 @@
     <ClInclude Include="src\randomizer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\item_array_stb.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\settings.h">
       <Filter>Header Files</Filter>
     </ClInclude>

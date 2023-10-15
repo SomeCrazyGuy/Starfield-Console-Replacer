@@ -192,7 +192,6 @@
     <ClInclude Include="src\gui.h" />
     <ClInclude Include="src\hook_api.h" />
     <ClInclude Include="src\internal_plugin.h" />
-    <ClInclude Include="src\item_array_stb.h" />
     <ClInclude Include="src\log_buffer.h" />
     <ClInclude Include="src\main.h" />
     <ClInclude Include="src\randomizer.h" />
