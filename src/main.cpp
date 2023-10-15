@@ -8,7 +8,7 @@
 
 #include "gui.h"
 #include "console.h"
-#include "configfile.h"
+#include "settings.h"
 #include "settings_tab.h"
 
 
@@ -194,21 +194,33 @@ static void HookDX12() {
 }
 
 
+// quick hack for structname.membername or struct->member passed to BIND_INT
+inline constexpr const char* member_name_only(const char* in) {
+        while (*in) ++in;
+        --in;
+        while (
+                ((*in >= 'a') && (*in <= 'z')) ||
+                ((*in >= '0') && (*in <= '9')) ||
+                ((*in >= 'A') && (*in <= 'Z')) ||
+                (*in == ':')
+                ) --in;
+        ++in;
+        return in;
+}
+
+#define BIND_INT_DEFAULT(HANDLE, INT_PTR) HANDLE, member_name_only(#INT_PTR ":internal"), &INT_PTR, 0, 0, NULL
+
+
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
         ASSERT(OLD_Present == NULL);
 
-       
-#define CONFIG_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleConfig.txt"
         {
                 auto s = GetSettingsMutable();
-                API.Config->Load(CONFIG_FILE_PATH);
-                API.Config->BindInt(BIND_INT(s->ConsoleHotkey));
-                API.Config->BindInt(BIND_INT(s->HotkeyModifier));
-                API.Config->BindInt(BIND_INT(s->FontScaleOverride));
-                API.Config->Save(CONFIG_FILE_PATH);
+                auto h = API.Config->Load("(internal)");
+                API.Config->BindInt(BIND_INT_DEFAULT(h, s->ConsoleHotkey));
+                API.Config->BindInt(BIND_INT_DEFAULT(h, s->FontScaleOverride));
+                API.Config->BindInt(BIND_INT_DEFAULT(h, s->HotkeyModifier));
         }
-#undef CONFIG_FILE_PATH
-        
 
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;
@@ -407,6 +419,11 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         const auto modifier = GetSettings()->HotkeyModifier;
                         if ((modifier == 0) || (GetKeyState(modifier) < 0)) {
                                 should_show_ui = !should_show_ui;
+
+                                //when you open the UI, settings are saved
+                                if (should_show_ui) {
+                                        SaveSettingsRegistry();
+                                }
                         }
                 }
 

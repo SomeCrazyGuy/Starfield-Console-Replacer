@@ -128,13 +128,3 @@ void SaveConfig(const char* filename) {
         fclose(f);
 }
 
-
-static constexpr struct config_api_t Config {
-        LoadConfig,
-        SaveConfig,
-        BindConfigInt,
-};
-
-extern const struct config_api_t* GetConfigAPI() {
-        return &Config;
-}

@@ -42,6 +42,9 @@
 typedef unsigned char boolean;
 
 
+// Opaque handle for the settings save/load system
+typedef uint32_t SettingsHandle;
+
 // Opaque handle for the log buffer system
 typedef uint32_t LogBufferHandle;
 
@@ -85,19 +88,61 @@ struct callback_api_t {
         void (*RegisterEveryFrameCallabck)(FUNC_PTR func);
 };
 
-
+/// <summary>
+/// This API is used for saving and loading data to a configuration file.
+/// </summary>
 struct config_api_t {
-        // load the "key=value" pairs from file specified by filepath
-        void (*Load)(const char* filepath);
+        /// <summary>
+        /// Called first to allocate internal structures for your settings.
+        /// The handle is invalidated by the next call to Load() from any mod (do not save the handle)
+        /// Usually you would bind all settings from the same function that loads them
+        /// </summary>
+        SettingsHandle (*Load)(const char* mod_name);
 
-        // Save all "key=value" pairs previously loaded
-        void (*Save)(const char* filepath);
+        /// <summary>
+        /// Bind an int* to the settings system and register it to the string `name`
+        /// `value` must be static, global, or heap allocated so that the settings system can read/write or save/load at any point.
+        /// The min and max values clamp the settings UI - set these both to 0 to disable clamping.
+        /// The description is optional but provides the user a hint when editing the setting in the UI.
+        /// </summary>
+        void (*BindInt)(SettingsHandle handle, const char* name, int* value, int min_value, int max_value, const char* description);
 
-        // bind the int to the keyname "name"
-        // int must be heap allocated or statically allocated because the pointer
-        // to value is stored for a later call to Save() to save the current
-        // value without needing to explicity save_int(name, value)
-        void (*BindInt)(const char* name, int* value);
+        /// <summary>
+        /// Bind a float* to the settings system and register it to the string `name`
+        /// `value` must be static, global, or heap allocated so that the settings system can read/write or save/load at any point.
+        /// The min and max values clamp the settings UI - set these both to 0 to disable clamping.
+        /// The description is optional but provides the user a hint when editing the setting in the UI.
+        /// </summary>
+        void (*BindFloat)(SettingsHandle handle, const char* name, float* value, float min_value, float max_value, const char* description);
+
+        /// <summary>
+        /// Bind a boolean* to the settings system and register it to the string `name`
+        /// `value` must be static, global, or heap allocated so that the settings system can read/write or save/load at any point.
+        /// The description is optional but provides the user a hint when editing the setting in the UI.
+        /// </summary>
+        void (*BindBoolean)(SettingsHandle handle, const char* name, boolean* value, const char* description);
+
+        /// <summary>
+        /// Bind a char* to the settings system and register it to the string `name`
+        /// `value` must be static, global, or heap allocated so that the settings system can read/write or save/load at any point.
+        /// `value_size` must be supplied so the settings system knows the maximum size string that `value` will hold.
+        /// The description is optional but provides the user a hint when editing the setting in the UI.
+        /// </summary>
+        void (*BindSettingString)(SettingsHandle handle, const char* name, char* value, uint32_t value_size, const char* description);
+
+        /// <summary>
+        /// Bind any arbitrary (even binary) data to the settings system and register it to the string `name`
+        /// `value` must be static, global, or heap allocated so that the settings system can read/write or save/load at any point.
+        /// `value_size` must be supplied so the settings system knows the maximum number of bytes that `value` will hold.
+        /// The description is optional but provides the user a hint when editing the setting in the UI.
+        /// </summary>
+        void (*BindSettingData)(SettingsHandle handle, const char* name, void* value, uint32_t value_size, const char* description);
+
+        /*
+                Note: there is no Save function, or any way to directly save values to the config file, saving is performed automatically
+                        and is one of the reasons why all of the bind functions want a global/static/heap pointer - periodically all settings
+                        from all mods will be iterated and stored into the configuration registry, usually when the UI is opened.
+        */
 };
 
 
@@ -266,39 +311,39 @@ typedef struct better_api_t {
 #include <stdio.h>
 #include <stdlib.h>
 
-//TODO: port this over to size_t again
-
 typedef struct item_array_t {
         char* data;
-        uint32_t count;
-        uint32_t capacity;
-        uint32_t element_size;
+        size_t count;
+        size_t capacity;
+        size_t element_size;
 } ItemArray;
 
 
-inline static ItemArray ItemArray_Create(uint32_t element_size) {
+inline ItemArray* ItemArray_Create(size_t element_size) {
         ASSERT(element_size > 0);
-        ItemArray ret = {};
-        ret.element_size = element_size;
+        ItemArray* ret = (ItemArray*)malloc(sizeof(*ret));
+        ASSERT(ret != NULL);
+        memset(ret, 0, sizeof(*ret));
+        ret->element_size = element_size;
         return ret;
 }
 
 
-inline static void ItemArray_Clear(ItemArray* items) {
+inline void ItemArray_Clear(ItemArray* items) {
         ASSERT(items != NULL);
         ASSERT(items->element_size != 0);
         items->count = 0;
 }
 
 
-inline static uint32_t ItemArray_Count(ItemArray* items) {
+inline size_t ItemArray_Count(const ItemArray* items) {
         ASSERT(items != NULL);
         ASSERT(items->element_size != 0);
         return items->count;
 }
 
 
-inline static void ItemArray_Free(ItemArray* items) {
+inline void ItemArray_Free(ItemArray* items) {
         ASSERT(items != NULL);
         ASSERT(items->element_size != 0);
         free(items->data);
@@ -307,7 +352,7 @@ inline static void ItemArray_Free(ItemArray* items) {
 }
 
 
-inline static void* ItemArray_At(ItemArray* items, uint32_t index) {
+inline void* ItemArray_At(const ItemArray* items, uint32_t index) {
         ASSERT(items != NULL);
         ASSERT(items->element_size != 0);
         ASSERT(items->data != NULL);
@@ -321,30 +366,32 @@ inline static void ItemArray_Append(ItemArray* items, void* items_array, uint32_
         ASSERT(items->element_size != 0);
         ASSERT(items->count > 0);
 
-        uint32_t capacity_needed = items_count + items->count;
+        size_t elim_size = items->element_size;
+        size_t capacity_needed = items_count + items->count;
 
         if (capacity_needed > items->capacity) {
-                uint32_t n = capacity_needed;
+                size_t n = capacity_needed;
 
-                /* find the power of 2 larger than n for a 32-bit n */
+                /* find the power of 2 larger than n for a 64-bit n via bit-twiddling hacks */
                 n--;
                 n |= n >> 1;
                 n |= n >> 2;
                 n |= n >> 4;
                 n |= n >> 8;
                 n |= n >> 16;
+                n |= n >> 32;
                 n++;
 
                 ASSERT(n > items->capacity);
-                items->data = (char*)realloc(items->data, n);
+                items->data = (char*)realloc(items->data, n * elim_size);
                 ASSERT(items->data != NULL);
 
                 items->capacity = n;
         }
 
-        char* end = (items->data + (items->element_size * items->count));
+        char* end = (items->data + (elim_size * items->count));
         items->count += items_count;
-        memcpy(end, items_array, (items->element_size * items_count));
+        memcpy(end, items_array, (elim_size * items_count));
 }
 
 

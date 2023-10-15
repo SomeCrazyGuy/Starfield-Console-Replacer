@@ -199,6 +199,7 @@
     <ClInclude Include="src\log_buffer.h" />
     <ClInclude Include="src\main.h" />
     <ClInclude Include="src\randomizer.h" />
+    <ClInclude Include="src\settings.h" />
     <ClInclude Include="src\settings_tab.h" />
     <ClInclude Include="src\simpledraw.h" />
   </ItemGroup>

@@ -5,9 +5,6 @@
 #include <string>
 
 
-typedef uint32_t SettingsHandle;
-
-
 #define SETTINGS_REGISTRY_PATH ".\\Data\\SFSE\\Plugins\\MiniModMenuRegistry.txt"
 
 enum class SettingType : uint32_t {
@@ -238,12 +235,11 @@ static void ParseSettingsRegistry() {
                 value.clear();
 
                 while (*s && isspace(*s)) ++s;
-                while (*s && (*s != '=') && !isspace(*s)) key += *s;
+                while (*s && (*s != '=') && !isspace(*s)) key += *s++;
                 while (*s && (*s != '=')) ++s;
-                ASSERT(*s == '=');
-                ++s;
+                ASSERT(*s++ == '=');
                 while (*s && isspace(*s)) ++s;
-                while (*s) value += *s;
+                while (*s) value += *s++;
                 while (isspace(value.back())) value.pop_back();
 
                 Registry[key] = value;
@@ -253,7 +249,7 @@ static void ParseSettingsRegistry() {
 }
 
 
-static void SaveSettingsRegistry() {
+extern void SaveSettingsRegistry() {
         FILE* f = NULL;
         fopen_s(&f, SETTINGS_REGISTRY_PATH, "wb");
         if (f == NULL) return;
@@ -280,6 +276,23 @@ static void SaveSettingsRegistry() {
                         break;
                 }
         }
+
+        fclose(f);
+}
+
+
+static constexpr const struct config_api_t Config = {
+        OpenSettings,
+        BindSettingInt,
+        BindSettingFloat,
+        BindSettingBoolean,
+        BindSettingString,
+        BindSettingData
+};
+
+
+extern const struct config_api_t* GetConfigAPI() {
+        return &Config;
 }
 
 
