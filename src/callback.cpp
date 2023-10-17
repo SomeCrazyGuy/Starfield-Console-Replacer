@@ -4,71 +4,25 @@
 
 #include <vector>
 
-static DrawCallbacks* DrawHead = nullptr;
-static DrawCallbacks* DrawTail = nullptr;
 
-struct HotkeyCallback {
-        const char* name;
-        HOTKEY_FUNC callback;
-};
+static std::vector<ModInfo> Infos{};
 
-static std::vector<HotkeyCallback> HotKeys{};
-
-static std::vector<FUNC_PTR> EveryFrame{};
-
-static void RegisterDrawCallbacks(DrawCallbacks* callbacks) {
-        callbacks->ll_next = nullptr;
-
-        if (DrawHead == nullptr) {
-                callbacks->ll_prev = nullptr;
-                DrawHead = callbacks;
-                DrawTail = DrawHead;
-                return;
-        }
-
-        callbacks->ll_prev = DrawTail;
-        DrawTail->ll_next = callbacks;
-        DrawTail = callbacks;
+extern const ModInfo* GetModInfo(size_t* out_count) {
+        *out_count = Infos.size();
+        return (*out_count > 0)? &Infos[0] : nullptr;
 }
 
-static void RegisterHotkeyCallback(const char* name, HOTKEY_FUNC func) {
-        HotKeys.push_back(HotkeyCallback{name, func});
+static void RegisterModInfo(const ModInfo info) {
+        ASSERT(info.Name != nullptr);
+        Infos.push_back(info);
 }
 
-static void RegisterEveryFrameCallback(FUNC_PTR func) {
-        EveryFrame.push_back(func);
-}
-
-static constexpr struct callback_api_t CallbackAPI{
-        RegisterDrawCallbacks,
-        RegisterHotkeyCallback,
-        RegisterEveryFrameCallback
+static constexpr struct callback_api_t CallbackAPI {
+        RegisterModInfo
 };
 
 extern constexpr const struct callback_api_t* GetCallbackAPI() {
         return &CallbackAPI;
-}
-
-extern const DrawCallbacks* GetCallbackHead() {
-        return DrawHead;
-}
-
-extern uint32_t GetHotkeyCount() {
-        return (uint32_t)HotKeys.size();
-}
-
-extern HOTKEY_FUNC GetHotkeyFunc(uint32_t index) {
-        ASSERT(index < HotKeys.size());
-        return HotKeys[index].callback;
-}
-
-extern uint32_t GetEveryFrameCallbackCount() {
-        return (uint32_t)EveryFrame.size();
-}
-
-extern FUNC_PTR GetEveryFrameCallback(uint32_t index) {
-        ASSERT(index < EveryFrame.size());
-        return EveryFrame[index];
 }
 
 
@@ -83,9 +37,16 @@ callback types:
         window,
         overlay
 
-allow plugins to register all 3?
+        everyframe -- rename to periodic? does it need to be every frame?
+        onkeydown -- aka hotkey callback, mabye the lookup should be an unordered_map, handle conflicts?
 
+allow plugins to register all 3 draw callbacks?
 
+//TODO: how would i get names from this? need to return a struct with the name* too...
 extern FUNC_PTR* GetCallbackArray(callback_type, &callback_count)
+
+maybe also rewrite the public api part ??:
+SetCallback(callback_type, func_ptr);
+
 
 */

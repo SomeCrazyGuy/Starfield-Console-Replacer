@@ -33,15 +33,20 @@ static boolean simple_input_text(const char* name, char* buffer, uint32_t buffer
 }
 
 
-static void simple_hbox_left(float split, float min_size) {
+//TODO: min_size calculation should be an em size:
+//      (min_size_em * font_size) + padding + border
+static void simple_hbox_left(float split, float min_size_em) {
         auto size = ImGui::GetContentRegionAvail();
         auto w = size.x * split;
+
+        const float min_size = (ImGui::GetFontSize() * min_size_em);
+
         w = (w < min_size) ? min_size : w;
 
         // weird code, i use the width available as the unique id 
         // because nested hboxes will only reduce available width and thus be unique
         ImGui::PushID((int)(size.x));
-        ImGui::BeginChild("##hbox left", ImVec2{ w, size.y });
+        ImGui::BeginChild("##hbox left", ImVec2{ w, size.y }, true);
 }
 
 
@@ -56,13 +61,14 @@ static void simple_hbox_end() {
         ImGui::PopID();
 }
 
-
-static void simple_vbox_top(float split, float min_size) {
+static void simple_vbox_top(float split, float min_size_em) {
         auto size = ImGui::GetContentRegionAvail();
         auto h = size.y * split;
+
+        const auto min_size = (ImGui::GetTextLineHeightWithSpacing() * min_size_em);
         h = (h < min_size) ? min_size : h;
         ImGui::PushID((int)(size.y));
-        ImGui::BeginChild("##vbox top", ImVec2{ size.x, h });
+        ImGui::BeginChild("##vbox top", ImVec2{ size.x, h }, true);
 }
 
 
@@ -132,6 +138,65 @@ static void simple_render_log_buffer(LogBufferHandle handle, boolean scrolltobot
 }
 
 
+
+static boolean simple_selection_list(int* selected, const void* items_userdata, int item_count, CALLBACK_SELECTIONLIST_TEXT tostring) {
+        const int sel = *selected;
+        
+        boolean ret = false;
+        ImGuiListClipper clip;
+        char str[128];
+
+        //TODO: because entries that return null are skipped, need to write code to keep iterating until we render enough options
+
+        clip.Begin(item_count);
+        while (clip.Step()) {
+                for (int i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
+                        ImGui::PushID(i);
+                        const char* text = tostring(items_userdata, i, str, sizeof(str));
+                        if (text) {
+                                if (ImGui::Selectable(text, (sel == i))) {
+                                        *selected = i;
+                                        ret = true;
+                                }
+                        }
+                        ImGui::PopID();
+                }
+        }
+        return ret;
+}
+
+
+static void simple_draw_table(const TableHeader* headers, uint32_t header_count, const void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell) {
+        if (ImGui::BeginTable("SimpleDrawTable", header_count, ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable)) {
+                for (uint32_t i = 0; i < header_count; ++i) {
+                        ImGui::TableSetupColumn(headers[i].name, (headers[i].expand) ? ImGuiTableColumnFlags_WidthStretch : ImGuiTableColumnFlags_WidthFixed);
+                }
+                ImGui::TableHeadersRow();
+
+                ImGuiListClipper clip;
+                clip.Begin(row_count);
+                while (clip.Step()) {
+                        for (int row = clip.DisplayStart; row < clip.DisplayEnd; ++row) {
+                                ImGui::PushID(row);
+                                ImGui::TableNextRow();
+                                for (uint32_t col = 0; col < header_count; ++col) {
+                                        if (ImGui::TableSetColumnIndex(col)) {
+                                                ImGui::SetNextItemWidth(-1.f); // fill table cell
+                                                //I'm using a layer of indirection here with the column_id because
+                                                //you may want to reorder the order that table columns are drawn
+                                                //without editing your possibly large switch-case within the draw_cell callback
+                                                //you can use an enum to init the column_id and use the same enum in the switch-case.
+                                                draw_cell(rows_userdata, row, headers[col].column_id);
+                                        }
+                                }
+                                ImGui::PopID();
+                        }
+                }
+                ImGui::EndTable();
+        }
+}
+
+
 static constexpr simple_draw_t SimpleDraw {
         simple_separator,
         simple_text,
@@ -148,7 +213,9 @@ static constexpr simple_draw_t SimpleDraw {
         simple_drag_int,
         simple_drag_float,
         simple_render_log_buffer,
-        simple_show_filtered_log_buffer
+        simple_show_filtered_log_buffer,
+        simple_selection_list,
+        simple_draw_table
 };
 
 

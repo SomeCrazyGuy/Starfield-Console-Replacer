@@ -83,8 +83,19 @@ static const simple_draw_t* SimpleDraw = nullptr;
 static char IOBuffer[256 * 1024];
 static LogBufferHandle OutputHandle;
 static LogBufferHandle HistoryHandle;
+static LogBufferHandle AppLog; // used for debugging
 static std::vector<uint32_t> SearchOutputLines{};
 static std::vector<uint32_t> SearchHistoryLines{};
+
+
+static void Log(const char* fmt, ...) {
+        static char logbuffer[4096];
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(logbuffer, sizeof(logbuffer), fmt, args);
+        LogBuffer->Append(AppLog, logbuffer);
+        va_end(args);
+}
 
 
 static void init_console() {
@@ -275,15 +286,19 @@ static void DrawTestLog(void* imgui);
 
 // this should be the only interface between the console replacer and the mod menu code
 extern void setup_console(const BetterAPI* api) {
-        static DrawCallbacks callbacks;
- 
+        API = api;
+        LogBuffer = api->LogBuffer;
+        AppLog = LogBuffer->Create("Console App Log", NULL);
+
+        ModInfo callbacks{};
         callbacks.Name = "BetterConsole";
         callbacks.DrawTab = &draw_console_window;
-        callbacks.DrawSettings = &DrawHotkeyTab;
-        callbacks.DrawLog = *DrawTestLog;
-        api->Callback->RegisterDrawCallbacks(&callbacks);
-        api->Callback->RegisterHotkey("BetterConsole", RunHotkey);
-        API = api;
+        callbacks.PluginLog = AppLog;
+        
+        //TODO: twitch integration is broken now
+        //callbacks.DrawSettings = &DrawHotkeyTab;
+        
+        API->Callback->RegisterModInfo(callbacks);
 }
 
 
@@ -345,48 +360,4 @@ static boolean RunHotkey(uint32_t vk_keycode, boolean shift, boolean ctrl) {
         }
 
         return false;
-}
-
-
-
-static void DrawTestLog(void* imgui) {
-        (void)imgui;
-        if (!ConsoleInit) init_console();
-
-        SimpleDraw->VboxTop(1 / 3.0, 0);
-        SimpleDraw->HboxLeft(1 / 3.0, 0);
-        SimpleDraw->Text("Top Left");
-        SimpleDraw->HBoxRight();
-        SimpleDraw->HboxLeft(1 / 2.0, 0);
-        SimpleDraw->Text("Top Center");
-        SimpleDraw->HBoxRight();
-        SimpleDraw->Text("Top Right");
-        SimpleDraw->HBoxEnd();
-        SimpleDraw->HBoxEnd();
-
-        SimpleDraw->VBoxBottom();
-        SimpleDraw->VboxTop(1.0 / 2, 0);
-        SimpleDraw->HboxLeft(1.0 / 3, 0);
-        SimpleDraw->Text("Middle Left");
-        SimpleDraw->HBoxRight();
-        SimpleDraw->HboxLeft(1.0 / 2, 0);
-        SimpleDraw->Text("Layout Test Code");
-        SimpleDraw->HBoxRight();
-        SimpleDraw->Text("Middle Right");
-        SimpleDraw->HBoxEnd();
-        SimpleDraw->HBoxEnd();
-
-        SimpleDraw->VBoxBottom();
-        SimpleDraw->HboxLeft(1.0 / 3, 0);
-        SimpleDraw->Text("Bottom Left");
-        SimpleDraw->HBoxRight();
-        SimpleDraw->HboxLeft(1.0 / 2, 0);
-        SimpleDraw->Text("Bottom Center");
-        SimpleDraw->HBoxRight();
-        SimpleDraw->Text("Bottom Right");
-        SimpleDraw->HBoxEnd();
-        SimpleDraw->HBoxEnd();
-
-        SimpleDraw->VBoxEnd();
-        SimpleDraw->VBoxEnd();
 }

@@ -20,6 +20,16 @@ static std::vector<LogBuffer> Logs{};
 
 
 static LogBufferHandle LogBufferCreate(const char* name, const char* path) {
+	
+	// create a dummy logfile for log 0
+	// this allows you to perform if(logbufferhandle) because a valid handle is never 0
+	// TODO: add assertions for log 0 below
+	if (!Logs.size()) {
+		LogBuffer null_log{};
+		null_log.name = "(null)";
+		Logs.push_back(null_log);
+	}
+
 	LogBuffer log;
 	log.name = name;
 	log.logfile = NULL;
@@ -170,3 +180,6 @@ static constexpr struct log_buffer_api_t LogBufferAPI {
 extern constexpr const struct log_buffer_api_t* GetLogBufferAPI() {
 	return &LogBufferAPI;
 }
+
+
+//todo: maybe have a file api that interacts with logbuffer instead?

@@ -16,8 +16,11 @@ static inline constexpr const char* GetRelativeProjectDir(const char* file_path)
         if (!file_path) return nullptr;
         const char* x = file_path;
         while (*x) ++x;
-        while ((x != file_path) && (*x != '\\')) --x;
-        --x;
+
+        //just limiting to filename for now, makes logs easier to read
+        //while ((x != file_path) && (*x != '\\')) --x;
+        //--x;
+        
         while ((x != file_path) && (*x != '\\')) --x;
         ++x;
         return x;

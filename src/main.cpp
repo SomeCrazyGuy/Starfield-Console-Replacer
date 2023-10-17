@@ -28,7 +28,6 @@ extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
         0, 0 //reserved fields
 };
 
-//#define FATAL_ERROR(X) do{MessageBoxA(NULL, X, "Debug", 0); ExitProcess(1);}while(0)
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT PresentFlags);
@@ -211,10 +210,10 @@ inline constexpr const char* member_name_only(const char* in) {
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
         ASSERT(OLD_Present == NULL);
-
         {
                 auto s = GetSettingsMutable();
-                auto h = API.Config->Load("internal");
+                //ASSERT(false && "HERE!!!");
+                auto h = API.Config->Load(BetterAPIName);
                 API.Config->BindInt(BIND_INT_DEFAULT(h, s->ConsoleHotkey));
                 API.Config->BindInt(BIND_INT_DEFAULT(h, s->FontScaleOverride));
                 API.Config->BindInt(BIND_INT_DEFAULT(h, s->HotkeyModifier));
@@ -367,6 +366,8 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
                 draw_gui();
 
+                ImGui::ShowDemoWindow();
+
                 ImGui::EndFrame();
                 ImGui::Render();
 
@@ -398,9 +399,13 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         }
 
         // just when you though we were done loading down the main render thread...
-        const auto cb_count = GetEveryFrameCallbackCount();
-        for (uint32_t i = 0; i < cb_count; ++i) {
-                GetEveryFrameCallback(i)();
+        size_t infos_count = 0;
+        auto infos = GetModInfo(&infos_count);
+        for (auto i = 0; i < infos_count; ++i) {
+                if (infos[i].PeriodicCallback) {
+                        //TODO: this callback should be 1 per frame, not all registered ones per frame
+                        infos[i].PeriodicCallback();
+                }
         }
 
         return OLD_Present(This, SyncInterval, PresentFlags);
@@ -424,10 +429,13 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
                 boolean shift = (GetKeyState(VK_SHIFT) < 0);
                 boolean ctrl = (GetKeyState(VK_CONTROL) < 0);
-                auto count = GetHotkeyCount();
-
-                for (uint32_t i = 0; i < count; ++i) {
-                        if (GetHotkeyFunc(i)((uint32_t)wParam, shift, ctrl)) break; //stop on first match
+          
+                size_t infos_count = 0;
+                auto infos = GetModInfo(&infos_count);
+                for (auto i = 0; i < infos_count; ++i) {
+                        if (infos[i].HotkeyCallback) {
+                                if (infos[i].HotkeyCallback((uint32_t)wParam, shift, ctrl)) break;
+                        }
                 }
         }
 

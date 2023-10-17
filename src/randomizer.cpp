@@ -139,6 +139,59 @@ static void RandomizerTab(void*) {
                 fclose(f);
         }
 
+        enum column_type { 
+                COL_DELETE, COL_WEIGHT, COL_COMMAND,
+                COL_COUNT
+        };
+
+        static const TableHeader headers[COL_COUNT] = {
+                {"Delete", COL_DELETE, false},
+                {"Weight", COL_WEIGHT, false},
+                {"Command Text", COL_COMMAND, true},
+        };
+
+        //Roundabout way because simpledraw tables cannot change row count while rendering
+        // because it could iterate beyond the new end of the table, or a realloc could invalidate the pointer.
+        //Also, it needs to be static so that i can use a lambda, but needs to be set to -1 every frame anyway... meh
+        static int request_delete_command_index;
+        request_delete_command_index = -1;
+
+        SimpleDraw->DrawTable(
+                headers,
+                COL_COUNT,
+                (const void*)&Commands[0],
+                (uint32_t)Commands.size(),
+                [](const void* userdata, int row, int id) {
+                        auto cmds = (RandomizerCommand*)userdata; //TODO: why am I not getting a warning casting a const* to a non-const*?
+                        auto cmd = &cmds[row];
+                        switch ((enum column_type) id)
+                        {
+                        case COL_DELETE:
+                                if (SimpleDraw->Button("Delete")) {
+                                        request_delete_command_index = row;
+                                }
+                                break;
+                        case COL_WEIGHT: 
+                                if (ImGui::DragInt("##weight", &cmd->weight, 10, 0, 1000)) {
+                                        WeightsAreProcessed = false;
+                                }
+                                break;
+                        case COL_COMMAND:
+                                SimpleDraw->InputText("##command", cmd->command, sizeof(cmd->command), false);
+                                break;
+                        default:
+                                ASSERT(false && "Invalid column number for cell draw callback!");
+                                break;
+                        }
+                }
+        );
+
+        if (request_delete_command_index != -1) {
+                Commands.erase(Commands.begin() + request_delete_command_index);
+        }
+
+
+        /*
         if (ImGui::BeginTable("commands", 3, ImGuiTableFlags_Resizable)) {
                 ImGui::TableSetupColumn("Delete", ImGuiTableColumnFlags_WidthFixed);
                 ImGui::TableSetupColumn("Weight", ImGuiTableColumnFlags_WidthFixed);
@@ -168,6 +221,7 @@ static void RandomizerTab(void*) {
 
                 ImGui::EndTable();
         }
+        */
 
 }
 
@@ -186,11 +240,11 @@ static boolean FilterHotkey(uint32_t vk, boolean shift, boolean ctrl) {
 extern void RegisterRandomizer(const BetterAPI* api) {
         init_randomizer(api);
 
-        static DrawCallbacks callback{};
+        static ModInfo callback{};
 
         callback.Name = "F24 Randomizer";
         callback.DrawTab = RandomizerTab;
+        callback.HotkeyCallback = FilterHotkey;
 
-        api->Callback->RegisterDrawCallbacks(&callback);
-        api->Callback->RegisterHotkey("Randomizer", FilterHotkey);
+        api->Callback->RegisterModInfo(callback);
 }

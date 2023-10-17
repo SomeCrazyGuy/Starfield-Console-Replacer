@@ -34,7 +34,7 @@
 #define BetterAPIMessageType 1
 
 // in your sfse RegisterListener() use this as the sender name
-#define BetterAPIName "BetterConsole"
+#define BetterAPIName "Mini Mod Menu"
 
 
 // This file no dependencies and is plain C (C89 maybe? a 34 year old language)
@@ -49,8 +49,13 @@ typedef uint32_t SettingsHandle;
 typedef uint32_t LogBufferHandle;
 
 
-//opaque handle for the itemarray api
-typedef uint32_t ItemArrayHandle;
+//used to implment an std::vector knockoff for C
+typedef struct item_array_t {
+        char* data;
+        size_t count;
+        size_t capacity;
+        size_t element_size;
+} ItemArray;
 
 
 // while visual studio (MSVC) lets you cast a function pointer to a void*
@@ -60,32 +65,60 @@ typedef void (*FUNC_PTR)(void);
 
 
 // For draw callbacks
-typedef void (*DRAW_FUNC)(void* imgui_context);
+typedef void (*CALLBACK_DRAW_TAB)(void* imgui_context);
 
+//used to draw an overlay or separate imgui window, requires linking with imgui (no simpledraw)
+typedef void (*CALLBACK_DRAW_WINDOW)(void* imgui_context, boolean menu_is_open);
 
 // For hotkeys callback
-typedef boolean(*HOTKEY_FUNC)(uint32_t vk_keycode, boolean shift, boolean ctrl);
+typedef boolean(*CALLBACK_HOTKEY)(uint32_t vk_keycode, boolean shift, boolean ctrl);
+
+// for the simpledraw selectionlist, used to turn an entry into a string
+typedef const char* (*CALLBACK_SELECTIONLIST_TEXT)(const void* item, uint32_t index, char* out, uint32_t num_chars);
+
+// for the simpledraw table renderer, used to draw the controls for a specific cell in the table
+// this callback will be called for each *rendered* cell in the table (the table clips unseen cells)
+typedef void (*CALLBACK_TABLE_DRAWCELL)(const void* userdata, int current_row, int column_id);
 
 
-typedef struct draw_callbacks_t {
-        // intrusive double-linked list, do not touch
-        struct draw_callbacks_t* ll_prev;
-        struct draw_callbacks_t* ll_next;
-
+typedef struct mod_info_t {
         // how you want you plugin to show up in the UI
-        const char* Name; 
-        
+        // i dont restrict how many modinfo structures you can register, but i should restrict to 1 right?
+        const char* Name;
+
         // the optional callbacks for drawing
-        DRAW_FUNC DrawTab; // called to draw the contents of your mods tab
-        DRAW_FUNC DrawSettings; // called to draw your mod settings page
-        DRAW_FUNC DrawLog; // called to draw your mods log page
-        DRAW_FUNC DrawWindow; // called to draw your mods imgui window
-} DrawCallbacks;
+        CALLBACK_DRAW_TAB    DrawTab; // called to draw the contents of your mods tab
+        CALLBACK_DRAW_WINDOW DrawWindow; // called to draw your mods imgui window
+        CALLBACK_HOTKEY      HotkeyCallback; //called on key down, return true if you handled the input. TODO: add hashmap for hotkey filter
+        FUNC_PTR             PeriodicCallback; // called every "1 / number of ModInfo" frames
+                                                // for example, if 5 plugins are loaded, this is called every 5 frames
+        LogBufferHandle PluginLog; // show this log in the "modmenu tab\logs tab\mod name" log
+} ModInfo;
+
+
+// information used to draw tables using the simpledraw api, pass an array of these to the DrawTable function
+typedef struct table_header_t {
+        const char* name; // name of the header
+        int column_id; // the "value" of a column, could be an enum, must be unique,
+                        // sent as the column_id parameter of the callback function
+        boolean expand;   // true if this column should expand to fill available space
+        //boolean sortable; // true if this column can be sorted - not implemented yet
+} TableHeader;
+
+
+// TODO: use callback type and have a single registercallback export function
+enum CallbackType {
+        CALLBACKTYPE_TAB,
+        CALLBACKTYPE_WINDOW,
+        CALLBACKTYPE_OVERLAY,
+
+        CALLBACKTYPE_HOTKEY,
+        CALLBACTYPE_PERIODIC
+};
+
 
 struct callback_api_t {
-        void (*RegisterDrawCallbacks)(DrawCallbacks* draw_callbacks);
-        void (*RegisterHotkey)(const char* name, HOTKEY_FUNC func);
-        void (*RegisterEveryFrameCallabck)(FUNC_PTR func);
+        void (*RegisterModInfo)(const ModInfo info);
 };
 
 /// <summary>
@@ -233,6 +266,12 @@ struct simple_draw_t {
         // if scroll_to_bottom is true, force the logbuffer region to scroll from its current position
         // takes a pointer to an array of line numbers and only displays those lines in the widget
         void (*ShowFilteredLogBuffer)(LogBufferHandle handle, const uint32_t* lines, uint32_t line_count, boolean scroll_to_bottom);
+
+        //if tostring returns null, the entry is skipped
+        boolean(*SelectionList)(int* selected, const void* items_userdata, int item_count, CALLBACK_SELECTIONLIST_TEXT tostring);
+
+
+        void (*DrawTable)(const TableHeader* headers, uint32_t header_count, const void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell);
 };
 
 
@@ -296,7 +335,7 @@ typedef struct better_api_t {
 #ifdef BETTERAPI_ENABLE_ASSERTIONS
 #include <stdio.h>
 #include <Windows.h>
-#define ASSERT(X) do { if((X)) break; char msg[1024]; snprintf(msg, sizeof(msg), "FILE: %s\nFUNC: %s:%u\n%s", __FILE__, __func__, __LINE__, #X); MessageBoxA(NULL, msg, "Assertion Failure", 0); exit(EXIT_FAILURE); }while(0)
+#define ASSERT(X) do { if((X)) break; char msg[1024]; snprintf(msg, sizeof(msg), "FILE: %s\nFUNC: %s:%u\n%s", __FILE__, __func__, __LINE__, #X); MessageBoxA(NULL, msg, "Assertion Failure", 0); abort(); }while(0)
 #else
 #define ASSERT(X) do {} while(0)
 #endif // BETTERAPI_ENABLE_ASSERTIONS
@@ -311,14 +350,6 @@ typedef struct better_api_t {
 
 #include <stdio.h>
 #include <stdlib.h>
-
-typedef struct item_array_t {
-        char* data;
-        size_t count;
-        size_t capacity;
-        size_t element_size;
-} ItemArray;
-
 
 inline ItemArray* ItemArray_Create(size_t element_size) {
         ASSERT(element_size > 0);
@@ -362,10 +393,10 @@ inline void* ItemArray_At(const ItemArray* items, uint32_t index) {
 }
 
 
-inline static void ItemArray_Append(ItemArray* items, void* items_array, uint32_t items_count) {
+inline void* ItemArray_Append(ItemArray* items, const void* items_array, uint32_t items_count) {
         ASSERT(items != NULL);
         ASSERT(items->element_size != 0);
-        ASSERT(items->count > 0);
+        ASSERT(items_count > 0);
 
         size_t elim_size = items->element_size;
         size_t capacity_needed = items_count + items->count;
@@ -392,13 +423,43 @@ inline static void ItemArray_Append(ItemArray* items, void* items_array, uint32_
 
         char* end = (items->data + (elim_size * items->count));
         items->count += items_count;
-        memcpy(end, items_array, (elim_size * items_count));
+        if (items_array) {
+                memcpy(end, items_array, (elim_size * items_count));
+        }
+        else {
+                // TODO: should i memset here?
+        }
+        return end;
 }
 
 
-inline static void ItemArray_PushBack(ItemArray* items, void* item) {
-        ItemArray_Append(items, item, 1);
+inline void* ItemArray_PushBack(ItemArray* items, const void* item) {
+        return ItemArray_Append(items, item, 1);
 }
+
+
+//this one is interesting, you cant placement new in C, but you can avoid copying large array items
+//by just extending the itemarray and returning the pointer to where you want the item to go.
+//basically using the itemarray as a kind of arena allocator or object pool.
+inline void* ItemArray_EmplaceBack(ItemArray* items, uint32_t items_count) {
+        return ItemArray_Append(items, NULL, items_count);
+}
+
+
+inline void ItemArray_PopBack(ItemArray* items) {
+        ASSERT(items != NULL);
+        if (items->count) items->count--;
+}
+
+
+// these defines make it a little easier to work with item arrays
+// its easy to forget that you need to pass the pointer of the input even if the input is a pointer already
+// and the output is a pointer to the entry in the array, so must be dereferenced as the right type
+#define ITEMARRAY_TO_ITEM(X) ((const void*)&(X))
+
+#define ITEMARRAY_FROM_ITEM(TYPE, ITEM) (*(TYPE*)(ITEM))
+
+
 #endif // !BETTERAPI_STD
 #endif //BETTERAPI_ENABLE_STD
 
