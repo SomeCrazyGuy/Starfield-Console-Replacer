@@ -106,17 +106,6 @@ typedef struct table_header_t {
 } TableHeader;
 
 
-// TODO: use callback type and have a single registercallback export function
-enum CallbackType {
-        CALLBACKTYPE_TAB,
-        CALLBACKTYPE_WINDOW,
-        CALLBACKTYPE_OVERLAY,
-
-        CALLBACKTYPE_HOTKEY,
-        CALLBACTYPE_PERIODIC
-};
-
-
 struct callback_api_t {
         void (*RegisterModInfo)(const ModInfo info);
 };

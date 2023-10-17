@@ -431,9 +431,3 @@ extern void draw_settings_tab() {
         SimpleDraw->HBoxEnd();
 }
 
-
-//TODO: implement the following functions for the internal api, or draw using simpledraw?
-// gethandlecount()
-// gethandlename(handle)
-// getsettingscount(handle)
-// getboundsetting(handle, index)

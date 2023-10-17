@@ -212,7 +212,6 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         ASSERT(OLD_Present == NULL);
         {
                 auto s = GetSettingsMutable();
-                //ASSERT(false && "HERE!!!");
                 auto h = API.Config->Load(BetterAPIName);
                 API.Config->BindInt(BIND_INT_DEFAULT(h, s->ConsoleHotkey));
                 API.Config->BindInt(BIND_INT_DEFAULT(h, s->FontScaleOverride));
