@@ -435,9 +435,20 @@ inline void* ItemArray_EmplaceBack(ItemArray* items, uint32_t items_count) {
 }
 
 
-inline void ItemArray_PopBack(ItemArray* items) {
+inline void ItemArray_PopBack(ItemArray* items, uint32_t count) {
         ASSERT(items != NULL);
-        if (items->count) items->count--;
+        if (items->count > count) {
+                items->count -= count;
+        }
+        else {
+                items->count = 0;
+        }
+}
+
+
+inline void ItemArray_Reserve(ItemArray* items, uint32_t count) {
+        ItemArray_EmplaceBack(items, count);
+        ItemArray_PopBack(items, count);
 }
 
 

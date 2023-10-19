@@ -60,7 +60,7 @@ extern void draw_gui() {
                         const auto selection_changed = SimpleDraw->SelectionList(
                                 &selected_log,
                                 infos,
-                                infos_count,
+                                (int)infos_count,
                                 [](const void* item, uint32_t index, char* out, uint32_t out_size) -> const char* {
                                         (void)out;
                                         (void)out_size;

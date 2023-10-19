@@ -11,16 +11,10 @@
 #include "../betterapi.h"
 
 
-// adding heavy debugging asserts until crashes are fixed
 static inline constexpr const char* GetRelativeProjectDir(const char* file_path) noexcept {
         if (!file_path) return nullptr;
         const char* x = file_path;
         while (*x) ++x;
-
-        //just limiting to filename for now, makes logs easier to read
-        //while ((x != file_path) && (*x != '\\')) --x;
-        //--x;
-        
         while ((x != file_path) && (*x != '\\')) --x;
         ++x;
         return x;
@@ -37,41 +31,11 @@ extern void Log(const char* file, const char* func, const int line, const char* 
 #include "log_buffer.h"
 
 
-/* TODO List:
-        -documentation
-
-        nexusmods todo list:
-        ====================
-        Easy - option to pass through input to game while console is open
-
-        Easy - allow >1 lines to be pasted into the command input (like paste a whole bat file)
-
-        Medium - get/set selected ref
-
-        Medium - get the ref of the object you are looking at
-
-        Medium - once selected ref is working, add get base id
-
-        Unknown - 1 report of incompatibility with reactor count mod
-
-        Unknown - Game crashes at startup for some users (might be dlss mod related?)
-
-        Unknown - Game crashes when F1 is pressed for some users (might be dlss mod related?)
-
-        Unknown - puredark dlss is not compatible, but only for reading keyboard and mouse input
-
-        Unknown - "Streamline Native (Frame Gen - DLSS - Reflex Integration)" causes crash on F1
-
-        Unknown - "Starfield Frame Generation - Replacing FSR2 with DLSS-G" causes instant CTD
-*/
-
 
 // --------------------------------------------------------------------
-// ---- Change these offsets for each game update, need signatures ----
+// ---- Change these offsets for each game update                  ----
 // --------------------------------------------------------------------
 constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 7, 36);
-
-
 
 
 

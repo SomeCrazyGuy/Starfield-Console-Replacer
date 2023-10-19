@@ -58,19 +58,14 @@ extern ModMenuSettings* GetSettingsMutable() {
         return &Settings;
 }
 
+
 extern const ModMenuSettings* GetSettings() {
         return GetSettingsMutable();
 }
 
 
-
 static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
         auto ret = OLD_CreateCommandQueue(This, pDesc, riid, ppCommandQueue);
-        static unsigned ccc = 0;
-        ++ccc;
-        char buff[128];
-        snprintf(buff, 128, "FAKE_CreateCommandQueue: %u, queue: %p", ccc, *(ID3D12CommandQueue**)ppCommandQueue);
-        //MessageBoxA(NULL, buff, "Debug", 0);
         if(!d3d12CommandQueue) d3d12CommandQueue = *(ID3D12CommandQueue**)ppCommandQueue;
         return ret;
 }
