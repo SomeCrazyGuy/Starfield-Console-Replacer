@@ -23,7 +23,6 @@ static LogBufferHandle LogBufferCreate(const char* name, const char* path) {
 	
 	// create a dummy logfile for log 0
 	// this allows you to perform if(logbufferhandle) because a valid handle is never 0
-	// TODO: add assertions for log 0 below
 	if (!Logs.size()) {
 		LogBuffer null_log{};
 		null_log.name = "(null)";
@@ -42,24 +41,28 @@ static LogBufferHandle LogBufferCreate(const char* name, const char* path) {
 }
 
 static const char* LogBufferGetName(LogBufferHandle handle) {
+	ASSERT(handle != 0);
 	ASSERT(handle < Logs.size());
 	return Logs[handle].name;
 }
 
 
 static uint32_t LogBufferGetSize(LogBufferHandle handle) {
+	ASSERT(handle != 0);
 	ASSERT(handle < Logs.size());
 	return (uint32_t)Logs[handle].buffer.size();
 }
 
 
 static uint32_t LogBufferGetLineCount(LogBufferHandle handle) {
+	ASSERT(handle != 0);
 	ASSERT(handle < Logs.size());
 	return (uint32_t)Logs[handle].lines.size();
 }
 
 
 static const char* LogBufferGetLine(LogBufferHandle handle, uint32_t line) {
+	ASSERT(handle != 0);
 	ASSERT(handle < Logs.size());
 	const auto& l = Logs[handle];
 	const auto offset = l.lines.at(line);
@@ -70,6 +73,7 @@ static const char* LogBufferGetLine(LogBufferHandle handle, uint32_t line) {
 
 
 static void LogBufferClear(LogBufferHandle handle) {
+	ASSERT(handle != 0);
 	ASSERT(handle < Logs.size());
 	auto& log = Logs[handle];
 	log.lines.clear();
@@ -78,6 +82,7 @@ static void LogBufferClear(LogBufferHandle handle) {
 
 
 static void LogBufferAppend(LogBufferHandle handle, const char* line) {
+	ASSERT(handle != 0); 
 	ASSERT(handle < Logs.size());
 	auto& l = Logs[handle];
 	auto offset = l.buffer.size();
@@ -92,6 +97,7 @@ static void LogBufferAppend(LogBufferHandle handle, const char* line) {
 
 
 static void LogBufferSave(LogBufferHandle handle, const char* filename) {
+	ASSERT(handle != 0);
 	ASSERT(handle < Logs.size());
 	FILE* f = nullptr;
 	fopen_s(&f, filename, "wb");
@@ -107,6 +113,7 @@ static void LogBufferSave(LogBufferHandle handle, const char* filename) {
 
 // close the file handle for a logbuffer
 static void LogBufferCloseFile(LogBufferHandle handle) {
+	ASSERT(handle != 0);
 	ASSERT(handle < Logs.size());
 	auto& l = Logs[handle];
 	if (!l.logfile) return;

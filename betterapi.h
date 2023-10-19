@@ -415,9 +415,6 @@ inline void* ItemArray_Append(ItemArray* items, const void* items_array, uint32_
         if (items_array) {
                 memcpy(end, items_array, (elim_size * items_count));
         }
-        else {
-                // TODO: should i memset here?
-        }
         return end;
 }
 

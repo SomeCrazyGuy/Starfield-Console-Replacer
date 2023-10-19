@@ -200,7 +200,7 @@ inline constexpr const char* member_name_only(const char* in) {
         return in;
 }
 
-#define BIND_INT_DEFAULT(HANDLE, INT_PTR) HANDLE, member_name_only(#INT_PTR), &INT_PTR, 0, 0, NULL
+#define BIND_INT_DEFAULT(BIND_HANDLE, INT_PTR) BIND_HANDLE, member_name_only(#INT_PTR), &INT_PTR, 0, 0, NULL
 
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
@@ -393,14 +393,15 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         }
 
         // just when you though we were done loading down the main render thread...
+        // now we have the periodic callback. these callbacks are spread out over seveal frames
+        // each mod can register one callback and that callback will be called every "1 / mod count" frames
         size_t infos_count = 0;
         auto infos = GetModInfo(&infos_count);
-        for (auto i = 0; i < infos_count; ++i) {
-                if (infos[i].PeriodicCallback) {
-                        //TODO: this callback should be 1 per frame, not all registered ones per frame
-                        infos[i].PeriodicCallback();
-                }
-        }
+
+        static uint32_t periodic_id = 0;
+        uint32_t this_frame_callback = periodic_id++ % infos_count;
+        auto callback = infos[this_frame_callback].PeriodicCallback;
+        if (callback) callback();
 
         return OLD_Present(This, SyncInterval, PresentFlags);
 }

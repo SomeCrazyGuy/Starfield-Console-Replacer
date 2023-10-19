@@ -33,7 +33,7 @@ static boolean simple_input_text(const char* name, char* buffer, uint32_t buffer
 }
 
 
-//TODO: min_size calculation should be an em size:
+//NOTE: this uses em size which is roughly font size + imgui padding and border size
 //      (min_size_em * font_size) + padding + border
 static void simple_hbox_left(float split, float min_size_em) {
         auto size = ImGui::GetContentRegionAvail();
@@ -61,6 +61,7 @@ static void simple_hbox_end() {
         ImGui::PopID();
 }
 
+//NOTE: this uses em size which is roughly font size + imgui padding and border size
 static void simple_vbox_top(float split, float min_size_em) {
         auto size = ImGui::GetContentRegionAvail();
         auto h = size.y * split;
