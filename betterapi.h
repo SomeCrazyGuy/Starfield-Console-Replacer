@@ -18,7 +18,6 @@
 ******************************************************************************/
 
 
-
 // Note: this API is not thread safe,
 // all of the below functions are operating within idxgiswapchain::present
 // as the game is trying submit a frame to the gpu
@@ -42,9 +41,6 @@
 typedef unsigned char boolean;
 
 
-// Opaque handle for the settings save/load system
-typedef uint32_t SettingsHandle;
-
 // Opaque handle for the log buffer system
 typedef uint32_t LogBufferHandle;
 
@@ -63,7 +59,6 @@ typedef struct item_array_t {
 // function pointer. Whatever, but this does help document the API better
 typedef void (*FUNC_PTR)(void);
 
-
 // For draw callbacks
 typedef void (*CALLBACK_DRAW_TAB)(void* imgui_context);
 
@@ -78,7 +73,7 @@ typedef const char* (*CALLBACK_SELECTIONLIST_TEXT)(const void* item, uint32_t in
 
 // for the simpledraw table renderer, used to draw the controls for a specific cell in the table
 // this callback will be called for each *rendered* cell in the table (the table clips unseen cells)
-typedef void (*CALLBACK_TABLE_DRAWCELL)(const void* userdata, int current_row, int column_id);
+typedef void (*CALLBACK_TABLE_DRAWCELL)(void* userdata, int current_row, int column_id);
 
 
 typedef struct mod_info_t {
@@ -120,7 +115,7 @@ struct config_api_t {
         /// Usually you would bind all settings from the same function that loads them
         /// `mod_name` should be unique, all your settings are namespaced with `mod_name` to prevent name collisions.
         /// </summary>
-        SettingsHandle (*Load)(const char* mod_name);
+        void (*Init)(const char* mod_name);
 
         /// <summary>
         /// Bind an int* to the settings system and register it to the string `name`
@@ -128,7 +123,7 @@ struct config_api_t {
         /// The min and max values clamp the settings UI - set these both to 0 to disable clamping.
         /// The description is optional but provides the user a hint when editing the setting in the UI.
         /// </summary>
-        void (*BindInt)(SettingsHandle handle, const char* name, int* value, int min_value, int max_value, const char* description);
+        void (*BindInt)(const char* name, int* value, int min_value, int max_value, const char* description);
 
         /// <summary>
         /// Bind a float* to the settings system and register it to the string `name`
@@ -136,14 +131,14 @@ struct config_api_t {
         /// The min and max values clamp the settings UI - set these both to 0 to disable clamping.
         /// The description is optional but provides the user a hint when editing the setting in the UI.
         /// </summary>
-        void (*BindFloat)(SettingsHandle handle, const char* name, float* value, float min_value, float max_value, const char* description);
+        void (*BindFloat)(const char* name, float* value, float min_value, float max_value, const char* description);
 
         /// <summary>
         /// Bind a boolean* to the settings system and register it to the string `name`
         /// `value` must be static, global, or heap allocated so that the settings system can read/write or save/load at any point.
         /// The description is optional but provides the user a hint when editing the setting in the UI.
         /// </summary>
-        void (*BindBoolean)(SettingsHandle handle, const char* name, boolean* value, const char* description);
+        void (*BindBoolean)(const char* name, boolean* value, const char* description);
 
         /// <summary>
         /// Bind a char* to the settings system and register it to the string `name`
@@ -151,7 +146,7 @@ struct config_api_t {
         /// `value_size` must be supplied so the settings system knows the maximum size string that `value` will hold.
         /// The description is optional but provides the user a hint when editing the setting in the UI.
         /// </summary>
-        void (*BindSettingString)(SettingsHandle handle, const char* name, char* value, uint32_t value_size, const char* description);
+        void (*BindSettingString)(const char* name, char* value, uint32_t value_size, const char* description);
 
         /// <summary>
         /// Bind any arbitrary (even binary) data to the settings system and register it to the string `name`
@@ -159,7 +154,7 @@ struct config_api_t {
         /// `value_size` must be supplied so the settings system knows the maximum number of bytes that `value` will hold.
         /// The description is optional but provides the user a hint when editing the setting in the UI.
         /// </summary>
-        void (*BindSettingData)(SettingsHandle handle, const char* name, void* value, uint32_t value_size, const char* description);
+        void (*BindSettingData)(const char* name, void* value, uint32_t value_size, const char* description);
 
         /*
                 Note: there is no Save function, or any way to directly save values to the config file, saving is performed automatically
@@ -260,7 +255,7 @@ struct simple_draw_t {
         boolean(*SelectionList)(int* selected, const void* items_userdata, int item_count, CALLBACK_SELECTIONLIST_TEXT tostring);
 
 
-        void (*DrawTable)(const TableHeader* headers, uint32_t header_count, const void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell);
+        void (*DrawTable)(const TableHeader* headers, uint32_t header_count, void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell);
 };
 
 
@@ -341,9 +336,10 @@ typedef struct better_api_t {
 #include <stdlib.h>
 
 inline ItemArray* ItemArray_Create(size_t element_size) {
-        ASSERT(element_size > 0);
         ItemArray* ret = (ItemArray*)malloc(sizeof(*ret));
+        ASSERT(element_size > 0);
         ASSERT(ret != NULL);
+
         memset(ret, 0, sizeof(*ret));
         ret->element_size = element_size;
         return ret;
@@ -353,6 +349,7 @@ inline ItemArray* ItemArray_Create(size_t element_size) {
 inline void ItemArray_Clear(ItemArray* items) {
         ASSERT(items != NULL);
         ASSERT(items->element_size != 0);
+        
         items->count = 0;
 }
 
@@ -360,6 +357,7 @@ inline void ItemArray_Clear(ItemArray* items) {
 inline size_t ItemArray_Count(const ItemArray* items) {
         ASSERT(items != NULL);
         ASSERT(items->element_size != 0);
+        
         return items->count;
 }
 
@@ -367,9 +365,9 @@ inline size_t ItemArray_Count(const ItemArray* items) {
 inline void ItemArray_Free(ItemArray* items) {
         ASSERT(items != NULL);
         ASSERT(items->element_size != 0);
+        
         free(items->data);
-        items->count = 0;
-        items->data = NULL;
+        memset(items, 0, sizeof(*items));
 }
 
 
@@ -378,6 +376,7 @@ inline void* ItemArray_At(const ItemArray* items, uint32_t index) {
         ASSERT(items->element_size != 0);
         ASSERT(items->data != NULL);
         ASSERT(items->count > index);
+        
         return (void*)(items->data + (items->element_size * index));
 }
 
@@ -405,7 +404,7 @@ inline void* ItemArray_Append(ItemArray* items, const void* items_array, uint32_
 
                 ASSERT(n > items->capacity);
                 items->data = (char*)realloc(items->data, n * elim_size);
-                ASSERT(items->data != NULL);
+                ASSERT(items->data != NULL && "Buy more RAM lol");
 
                 items->capacity = n;
         }

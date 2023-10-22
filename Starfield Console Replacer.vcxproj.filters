@@ -68,6 +68,9 @@
     <ClCompile Include="src\settings.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\util.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h">
@@ -128,6 +131,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\settings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

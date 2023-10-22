@@ -2,14 +2,14 @@
 
 #include "../imgui/imgui.h"
 
-#include <random>
-
 #include <varargs.h>
 #include <vector>
 
 #define WIN32_LEAN_AND_MEAN
 #define VC_EXTRA_LEAN
 #include <Windows.h>
+
+#include "util.h"
 
 
 
@@ -35,7 +35,6 @@ struct RandomizerCommand {
 };
 
 
-static std::default_random_engine Engine;
 static std::vector<RandomizerCommand> Commands{};
 static bool WeightsAreProcessed = false;
 
@@ -60,12 +59,6 @@ static void init_randomizer(const BetterAPI* api) {
 
         HookAPI = api->Hook;
         SimpleDraw = api->SimpleDraw;
-
-        std::random_device dev{};
-        std::seed_seq seq{dev(), dev()};
-        std::default_random_engine rand{seq};
-        Engine = rand;
-
 
         FILE* f = nullptr;
         fopen_s(&f, RANDOMIZER_FILE_PATH, "rb");
@@ -96,8 +89,7 @@ static void RunRandomCommand() {
         }
 
         const int max_weight = Commands.back().weight_total;
-        std::uniform_int_distribution<int> Dist(0, max_weight);
-        const int chosen_weight = Dist(Engine);
+        const int chosen_weight = random_in_range(0, max_weight);
 
         auto pick = std::lower_bound(
                 Commands.begin(),
@@ -159,10 +151,10 @@ static void RandomizerTab(void*) {
         SimpleDraw->DrawTable(
                 headers,
                 COL_COUNT,
-                (const void*)&Commands[0],
+                (void*)&Commands[0],
                 (uint32_t)Commands.size(),
-                [](const void* userdata, int row, int id) {
-                        auto cmds = (RandomizerCommand*)userdata; //TODO: why am I not getting a warning casting a const* to a non-const*?
+                [](void* userdata, int row, int id) {
+                        auto cmds = reinterpret_cast<RandomizerCommand*>(userdata); //TODO: why am I not getting a warning casting a const* to a non-const*?
                         auto cmd = &cmds[row];
                         switch ((enum column_type) id)
                         {
@@ -189,40 +181,6 @@ static void RandomizerTab(void*) {
         if (request_delete_command_index != -1) {
                 Commands.erase(Commands.begin() + request_delete_command_index);
         }
-
-
-        /*
-        if (ImGui::BeginTable("commands", 3, ImGuiTableFlags_Resizable)) {
-                ImGui::TableSetupColumn("Delete", ImGuiTableColumnFlags_WidthFixed);
-                ImGui::TableSetupColumn("Weight", ImGuiTableColumnFlags_WidthFixed);
-                ImGui::TableSetupColumn("Command Text", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableHeadersRow();
-
-                for (auto it = Commands.begin(); it != Commands.end(); ++it) {
-                        ImGui::PushID(&it->command);
-                        ImGui::TableNextRow();
-                        ImGui::TableSetColumnIndex(0);
-                        ImGui::SetNextItemWidth(50.f);
-                        if (ImGui::Button("Delete")) {
-                                WeightsAreProcessed = false;
-                                Commands.erase(it);
-                                break; // iterators are invalid now
-                        }
-                        ImGui::TableNextColumn();
-                        ImGui::SetNextItemWidth(50.f);
-                        if (ImGui::DragInt("##weight", &it->weight, 10.f, 10, 1000)) {
-                                WeightsAreProcessed = false;
-                        }
-                        ImGui::TableNextColumn();
-                        ImGui::SetNextItemWidth(-1.f);
-                        ImGui::InputText("##Command", it->command, sizeof(it->command));
-                        ImGui::PopID();
-                }
-
-                ImGui::EndTable();
-        }
-        */
-
 }
 
 static boolean FilterHotkey(uint32_t vk, boolean shift, boolean ctrl) {

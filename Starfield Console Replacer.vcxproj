@@ -175,6 +175,7 @@
     <ClCompile Include="src\randomizer.cpp" />
     <ClCompile Include="src\settings.cpp" />
     <ClCompile Include="src\simpledraw.cpp" />
+    <ClCompile Include="src\util.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="betterapi.h" />
@@ -197,6 +198,7 @@
     <ClInclude Include="src\randomizer.h" />
     <ClInclude Include="src\settings.h" />
     <ClInclude Include="src\simpledraw.h" />
+    <ClInclude Include="src\util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

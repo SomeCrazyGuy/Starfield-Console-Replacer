@@ -43,6 +43,40 @@ static bool should_show_ui = false;
 static HWND window_handle = nullptr;
 
 
+
+static void DebugLog(const char* func, int line, const char* fmt, ...) {
+        static char line_buffer[128];
+        static char format_buffer[4096];
+        static FILE* debugfile = nullptr;
+        
+        va_list args;
+        va_start(args, fmt);
+        vsnprintf(format_buffer, sizeof(format_buffer), fmt, args);
+        va_end(args);
+
+        snprintf(line_buffer, sizeof(line_buffer), "%s:%d> ", func, line);
+
+        if (debugfile == nullptr) {
+                fopen_s(&debugfile, "debuglog.txt", "wb");
+        }
+
+        ASSERT(debugfile != NULL);
+        fputs(line_buffer, debugfile);
+        fputs(format_buffer, debugfile);
+        fputc('\n', debugfile);
+        fflush(debugfile);
+}
+#ifdef _DEBUG
+#define Debug(...) do { DebugLog(__func__, __LINE__, " " __VA_ARGS__); } while(0)
+#else
+#define Debug(...) do {} while(0)
+#endif // _DEBUG
+
+
+
+
+
+
 //this is where the api* that all clients use comes from
 static const BetterAPI API {
         GetHookAPI(),
@@ -71,6 +105,136 @@ static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_
 }
 
 
+static HRESULT(*OLD_CreateSwapChainForHwnd)(
+        IDXGIFactory2* This,
+        ID3D12Device* Device,
+        HWND hWnd,
+        const DXGI_SWAP_CHAIN_DESC1* pDesc,
+        const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullscreenDesc,
+        IDXGIOutput* pRestrictToOutput,
+        IDXGISwapChain1** ppSwapChain
+        ) = nullptr;
+
+static HRESULT FAKE_CreateSwapChainForHwnd(
+        IDXGIFactory2* This,
+        ID3D12Device* Device,
+        HWND hWnd,
+        const DXGI_SWAP_CHAIN_DESC1* pDesc,
+        const DXGI_SWAP_CHAIN_FULLSCREEN_DESC* pFullscreenDesc,
+        IDXGIOutput* pRestrictToOutput,
+        IDXGISwapChain1** ppSwapChain
+) {
+        Debug();
+        auto ret = OLD_CreateSwapChainForHwnd(This, Device, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
+        Debug("On The other side!");
+
+        static bool once = 1;
+        if (once) {
+                once = 0;
+
+                enum : unsigned {
+                        QueryInterface,
+                        AddRef,
+                        Release,
+                        GetPrivateData,
+                        SetPrivateData,
+                        SetPrivateDataInterface,
+                        GetParent,
+                        GetDevice,
+                        Present,
+                };
+
+                OLD_Present =
+                        (decltype(OLD_Present))API.Hook->HookVirtualTable(
+                        *ppSwapChain,
+                        Present,
+                        (FUNC_PTR)FAKE_Present
+                );
+
+                Debug("Hooked present!");
+        }
+
+        return ret;
+}
+
+
+static HRESULT(*OLD_CreateDXGIFactory2)(UINT, REFIID, void**) = nullptr;
+static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactory) {
+        auto ret = OLD_CreateDXGIFactory2(Flags, RefID, ppFactory);
+
+        Debug();
+
+        static bool once = 1;
+        if (once) {
+                once = 0;
+
+                enum {
+                        QueryInterface,
+                        AddRef,
+                        Release,
+                        SetPrivateData,
+                        SetPrivateDataInterface,
+                        GetPrivateData,
+                        GetParent,
+                        EnumAdapters,
+                        MakeWindowAssociation,
+                        GetWindowAssociation,
+                        CreateSwapChain,
+                        CreateSoftwareAdapter,
+                        EnumAdapters1,
+                        IsCurrent,
+                        IsWindowedStereoEnabled,
+                        CreateSwapChainForHwnd
+                };
+
+                Debug();
+                OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookVirtualTable(
+                        *ppFactory,
+                        CreateSwapChainForHwnd,
+                        (FUNC_PTR) FAKE_CreateSwapChainForHwnd
+                );
+                Debug();
+        }
+
+        return ret;
+}
+
+
+static HRESULT (*OLD_D3D12CreateDevice)(IUnknown* pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid, void** ppDevice) = nullptr;
+static HRESULT FAKE_D3D12CreateDevice(IUnknown* pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid, void** ppDevice) {
+        Debug();
+        auto ret = OLD_D3D12CreateDevice(pAdapter, MinimumFeatureLevel, riid, ppDevice);
+
+        static bool once = 1;
+        if (once) {
+                once = 0;
+
+                enum : unsigned {
+                        QueryInterface,
+                        AddRef,
+                        Release,
+                        GetPrivateData,
+                        SetPrivateData,
+                        SetPrivateDataInterface,
+                        SetName,
+                        GetNodeCount,
+                        CreateCommandQueue
+                };
+
+                OLD_CreateCommandQueue =
+                        (decltype(OLD_CreateCommandQueue))API.Hook->HookVirtualTable(
+                                *ppDevice,
+                                CreateCommandQueue,
+                                (FUNC_PTR)FAKE_CreateCommandQueue
+                        );
+
+                Debug("Hooked CreateCommandQueue");
+        }
+
+        return ret;
+}
+
+
 static void HookDX12() {
         // Currently not compatible with dlss 3 frame generation, but the user wont know that unless we tell them
         if (GetModuleHandleA("nvngx_dlssg")) {
@@ -88,102 +252,21 @@ static void HookDX12() {
                 ExitProcess(1);
         }
 
-        //We need to find IDXGISwapChain3::Present() to hook it, we are going to take the long way....
-        static const auto temp_wndproc = [](HWND, UINT, WPARAM, LPARAM)-> LRESULT {
-                return true;
-        };
 
-        WNDCLASSEXA wc = { sizeof(WNDCLASSEX), CS_CLASSDC, temp_wndproc, 0L, 0L, GetModuleHandle(NULL), NULL, NULL, NULL, NULL, "temp", NULL };
-        ::RegisterClassExA(&wc);
-        HWND hwnd = ::CreateWindowA(wc.lpszClassName, "temp window", WS_OVERLAPPEDWINDOW, 100, 100, 600, 800, NULL, NULL, wc.hInstance, NULL);
+        FUNC_PTR cf2 = (FUNC_PTR)GetProcAddress(GetModuleHandleA("dxgi"), "CreateDXGIFactory2");
+        ASSERT(cf2 != NULL);
+        OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunction(
+                (FUNC_PTR)cf2,
+                (FUNC_PTR)FAKE_CreateDXGIFactory2
+        );
 
-        // Setup swap chain
-        DXGI_SWAP_CHAIN_DESC1 sd;
-        {
-                ZeroMemory(&sd, sizeof(sd));
-                sd.BufferCount = 3;
-                sd.Width = 0;
-                sd.Height = 0;
-                sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                sd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
-                sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-                sd.SampleDesc.Count = 1;
-                sd.SampleDesc.Quality = 0;
-                sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-                sd.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-                sd.Scaling = DXGI_SCALING_STRETCH;
-                sd.Stereo = FALSE;
-        }
 
-        static ID3D12Device* g_pd3dDevice = NULL;
-        static IDXGISwapChain3* g_pSwapChain = NULL;
-        static ID3D12CommandQueue* g_pd3dCommandQueue = NULL;
-
-        // Create device
-        D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_12_0;
-        ASSERT(D3D12CreateDevice(NULL, featureLevel, IID_PPV_ARGS(&g_pd3dDevice)) == S_OK);
-
-        IDXGIFactory4* dxgiFactory = NULL;
-        ASSERT(CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory)) == S_OK);
-
-        D3D12_COMMAND_QUEUE_DESC desc = {};
-        desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-        desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-        desc.NodeMask = 1;
-        ASSERT(g_pd3dDevice->CreateCommandQueue(&desc, IID_PPV_ARGS(&g_pd3dCommandQueue)) == S_OK);
-
-        //hack commandqueue vtable
-        enum class DeviceFunctionIndex : unsigned {
-                QueryInterface,
-                AddRef,
-                Release,
-                GetPrivateData,
-                SetPrivateData,
-                SetPrivateDataInterface,
-                SetName,
-                GetNodeCount,
-                CreateCommandQueue
-        };
-
-        OLD_CreateCommandQueue =
-                (decltype(OLD_CreateCommandQueue))API.Hook->HookVirtualTable(
-                        g_pd3dDevice,
-                        (unsigned)DeviceFunctionIndex::CreateCommandQueue,
-                        (FUNC_PTR)FAKE_CreateCommandQueue
-                );
-
-        IDXGISwapChain1* swapChain1 = NULL;
-        ASSERT(dxgiFactory->CreateSwapChainForHwnd(g_pd3dCommandQueue, hwnd, &sd, NULL, NULL, &swapChain1) == S_OK);
-        ASSERT(swapChain1->QueryInterface(IID_PPV_ARGS(&g_pSwapChain)) == S_OK);
-
-        swapChain1->Release();
-        dxgiFactory->Release();
-
-        enum class SwapchainFunctionIndex : unsigned {
-                QueryInterface,
-                AddRef,
-                Release,
-                GetPrivateData,
-                SetPrivateData,
-                SetPrivateDataInterface,
-                GetParent,
-                GetDevice,
-                Present,
-        };
-
-        OLD_Present =
-                (decltype(OLD_Present))API.Hook->HookVirtualTable(
-                        g_pSwapChain,
-                        (unsigned)SwapchainFunctionIndex::Present,
-                        (FUNC_PTR)FAKE_Present
-                );
-
-        g_pSwapChain->Release();
-        g_pd3dCommandQueue->Release();
-        g_pd3dDevice->Release();
-
-        ::DestroyWindow(hwnd);
-        ::UnregisterClassA(wc.lpszClassName, wc.hInstance);
+        FUNC_PTR cd = (FUNC_PTR)GetProcAddress(GetModuleHandleA("d3d12"), "D3D12CreateDevice");
+        ASSERT(cd != NULL);
+        OLD_D3D12CreateDevice = (decltype(OLD_D3D12CreateDevice))API.Hook->HookFunction(
+                (FUNC_PTR)cd,
+                (FUNC_PTR)FAKE_D3D12CreateDevice
+        );
 }
 
 
@@ -200,17 +283,21 @@ inline constexpr const char* member_name_only(const char* in) {
         return in;
 }
 
-#define BIND_INT_DEFAULT(BIND_HANDLE, INT_PTR) BIND_HANDLE, member_name_only(#INT_PTR), &INT_PTR, 0, 0, NULL
+#define BIND_INT_DEFAULT(INT_PTR) member_name_only(#INT_PTR), &INT_PTR, 0, 0, NULL
 
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
+#ifdef _DEBUG
+        while (!IsDebuggerPresent())Sleep(100);
+#endif // DEBUG
+
         ASSERT(OLD_Present == NULL);
         {
                 auto s = GetSettingsMutable();
-                auto h = API.Config->Load(BetterAPIName);
-                API.Config->BindInt(BIND_INT_DEFAULT(h, s->ConsoleHotkey));
-                API.Config->BindInt(BIND_INT_DEFAULT(h, s->FontScaleOverride));
-                API.Config->BindInt(BIND_INT_DEFAULT(h, s->HotkeyModifier));
+                API.Config->Init(BetterAPIName);
+                API.Config->BindInt(BIND_INT_DEFAULT(s->ConsoleHotkey));
+                API.Config->BindInt(BIND_INT_DEFAULT(s->FontScaleOverride));
+                API.Config->BindInt(BIND_INT_DEFAULT(s->HotkeyModifier));
         }
 
         static PluginHandle MyPluginHandle;
@@ -360,7 +447,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
                 draw_gui();
 
-                ImGui::ShowDemoWindow();
+                //ImGui::ShowDemoWindow();
 
                 ImGui::EndFrame();
                 ImGui::Render();
@@ -395,6 +482,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         // just when you though we were done loading down the main render thread...
         // now we have the periodic callback. these callbacks are spread out over seveal frames
         // each mod can register one callback and that callback will be called every "1 / mod count" frames
+        
         size_t infos_count = 0;
         auto infos = GetModInfo(&infos_count);
 
@@ -414,11 +502,8 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         const auto modifier = GetSettings()->HotkeyModifier;
                         if ((modifier == 0) || (GetKeyState(modifier) < 0)) {
                                 should_show_ui = !should_show_ui;
-
-                                //when you open the UI, settings are saved
-                                if (should_show_ui) {
-                                        SaveSettingsRegistry();
-                                }
+                                //when you open or close the UI, settings are saved
+                                SaveSettingsRegistry();
                         }
                 }
 

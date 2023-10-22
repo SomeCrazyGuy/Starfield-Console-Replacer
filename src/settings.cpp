@@ -9,6 +9,10 @@
 
 #define SETTINGS_REGISTRY_PATH ".\\Data\\SFSE\\Plugins\\MiniModMenuRegistry.txt"
 
+
+// Opaque handle for the settings save/load system
+typedef uint32_t SettingsHandle;
+
 enum class SettingType : uint32_t {
         Undefined,
         Integer,
@@ -52,8 +56,7 @@ static std::vector<BoundSetting> Settings{};
 static SettingsHandle CurrentValidSettingsHandle = (SettingsHandle) -1;
 
 
-#define BIND_CHECK(BIND_HANDLE, BIND_NAME, BIND_VALUE) do {\
-                ASSERT(BIND_HANDLE == CurrentValidSettingsHandle); \
+#define BIND_CHECK(BIND_NAME, BIND_VALUE) do {\
                 ASSERT(BIND_NAME != NULL); \
                 ASSERT(BIND_NAME[0] != '\0'); \
                 ASSERT(BIND_VALUE != NULL); \
@@ -71,7 +74,7 @@ static void ParseSettingsRegistry();
 // note2: the argument passed to OpenSettings will be the name that shows up in the settings menu
 //
 // note3: why OpenSettings? there is no CloseSettings... maybe rename to GetSettingHandle or similar?
-static SettingsHandle OpenSettings(const char* mod_name) {
+static void OpenSettings(const char* mod_name) {
         ASSERT(mod_name != NULL);
         ASSERT(mod_name[0] && "mod_name must not be an empty string!");
 
@@ -88,7 +91,6 @@ static SettingsHandle OpenSettings(const char* mod_name) {
         //Handles.push_back(mod_name);
         ItemArray_PushBack(Handles, ITEMARRAY_TO_ITEM(mod_name));
         CurrentValidSettingsHandle = ret;
-        return ret;
 }
 
 
@@ -108,10 +110,10 @@ static SettingsHandle OpenSettings(const char* mod_name) {
 /// <param name="min_value"> -- The minimum allowed value for `value`</param>
 /// <param name="max_value"> -- The maximum allowed value for `value`</param>
 /// <param name="description"> -- Optional description text for the setting shown to the user in the setting menu</param>
-static void BindSettingInt(SettingsHandle handle, const char* name, int* value, int min_value, int max_value, const char* description) {
-        BIND_CHECK(handle, name, value);
+static void BindSettingInt(const char* name, int* value, int min_value, int max_value, const char* description) {
+        BIND_CHECK(name, value);
         
-        BoundSetting s{ name, description, SettingValue{value}, handle };
+        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle };
         s.type = SettingType::Integer;
         s.min.as_int = min_value;
         s.max.as_int = max_value;
@@ -131,10 +133,10 @@ static void BindSettingInt(SettingsHandle handle, const char* name, int* value, 
 }
 
 
-static void BindSettingFloat(SettingsHandle handle, const char* name, float* value, float min_value, float max_value, const char* description) {
-        BIND_CHECK(handle, name, value);
+static void BindSettingFloat(const char* name, float* value, float min_value, float max_value, const char* description) {
+        BIND_CHECK(name, value);
 
-        BoundSetting s{ name, description, SettingValue{value}, handle };
+        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle};
         s.type = SettingType::Float;
         s.min.as_float = min_value;
         s.max.as_float = max_value;
@@ -154,10 +156,10 @@ static void BindSettingFloat(SettingsHandle handle, const char* name, float* val
 }
 
 
-static void BindSettingBoolean(SettingsHandle handle, const char* name, boolean* value, const char* description) {
-        BIND_CHECK(handle, name, value);
+static void BindSettingBoolean(const char* name, boolean* value, const char* description) {
+        BIND_CHECK(name, value);
 
-        BoundSetting s{ name, description, SettingValue{value}, handle };
+        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle };
         s.type = SettingType::Boolean;
         Settings.push_back(s);
 
@@ -175,10 +177,10 @@ static void BindSettingBoolean(SettingsHandle handle, const char* name, boolean*
 }
 
 
-static void BindSettingString(SettingsHandle handle, const char* name, char* value, uint32_t value_size, const char* description) {
-        BIND_CHECK(handle, name, value);
+static void BindSettingString(const char* name, char* value, uint32_t value_size, const char* description) {
+        BIND_CHECK(name, value);
 
-        BoundSetting s{ name, description, SettingValue{value}, handle };
+        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle };
         s.type = SettingType::String;
         s.value_size = value_size;
 
@@ -212,10 +214,10 @@ static void BindSettingString(SettingsHandle handle, const char* name, char* val
 
 
 
-static void BindSettingData(SettingsHandle handle, const char* name, void* value, uint32_t value_size, const char* description) {
-        BIND_CHECK(handle, name, value);
+static void BindSettingData(const char* name, void* value, uint32_t value_size, const char* description) {
+        BIND_CHECK(name, value);
 
-        BoundSetting s{ name, description, SettingValue{value}, handle };
+        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle };
         s.type = SettingType::Data;
         s.value_size = value_size;
 
