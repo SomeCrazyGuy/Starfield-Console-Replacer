@@ -57,6 +57,7 @@ static SettingsHandle CurrentValidSettingsHandle = (SettingsHandle) -1;
 
 
 #define BIND_CHECK(BIND_NAME, BIND_VALUE) do {\
+                ASSERT(CurrentValidSettingsHandle != -1 && "A mod forgot to call OpenSettings() before calling any Bind* function!"); \
                 ASSERT(BIND_NAME != NULL); \
                 ASSERT(BIND_NAME[0] != '\0'); \
                 ASSERT(BIND_VALUE != NULL); \
@@ -72,11 +73,10 @@ static void ParseSettingsRegistry();
 //       the same mod should not call OpenSettings() twice, you only get one valid handle
 //
 // note2: the argument passed to OpenSettings will be the name that shows up in the settings menu
-//
-// note3: why OpenSettings? there is no CloseSettings... maybe rename to GetSettingHandle or similar?
 static void OpenSettings(const char* mod_name) {
         ASSERT(mod_name != NULL);
         ASSERT(mod_name[0] && "mod_name must not be an empty string!");
+        ASSERT(CurrentValidSettingsHandle == -1 && "A mod did not call CloseSettings() after binding settings!");
 
         //best place to put this
         
@@ -91,6 +91,11 @@ static void OpenSettings(const char* mod_name) {
         //Handles.push_back(mod_name);
         ItemArray_PushBack(Handles, ITEMARRAY_TO_ITEM(mod_name));
         CurrentValidSettingsHandle = ret;
+}
+
+
+static void CloseSettings() {
+        CurrentValidSettingsHandle = -1;
 }
 
 
@@ -305,6 +310,7 @@ extern void SaveSettingsRegistry() {
 
 static constexpr const struct config_api_t Config = {
         OpenSettings,
+        CloseSettings,
         BindSettingInt,
         BindSettingFloat,
         BindSettingBoolean,

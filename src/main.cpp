@@ -54,7 +54,7 @@ static void DebugLog(const char* func, int line, const char* fmt, ...) {
         vsnprintf(format_buffer, sizeof(format_buffer), fmt, args);
         va_end(args);
 
-        snprintf(line_buffer, sizeof(line_buffer), "%s:%d> ", func, line);
+        snprintf(line_buffer, sizeof(line_buffer), "%s:%d>", func, line);
 
         if (debugfile == nullptr) {
                 fopen_s(&debugfile, "debuglog.txt", "wb");
@@ -253,18 +253,18 @@ static void HookDX12() {
         }
 
 
-        FUNC_PTR cf2 = (FUNC_PTR)GetProcAddress(GetModuleHandleA("dxgi"), "CreateDXGIFactory2");
-        ASSERT(cf2 != NULL);
+        FUNC_PTR FUN_CreateDXGIFactory2 = (FUNC_PTR)GetProcAddress(GetModuleHandleA("dxgi"), "CreateDXGIFactory2");
+        ASSERT(FUN_CreateDXGIFactory2 != NULL);
         OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunction(
-                (FUNC_PTR)cf2,
+                (FUNC_PTR)FUN_CreateDXGIFactory2,
                 (FUNC_PTR)FAKE_CreateDXGIFactory2
         );
 
 
-        FUNC_PTR cd = (FUNC_PTR)GetProcAddress(GetModuleHandleA("d3d12"), "D3D12CreateDevice");
-        ASSERT(cd != NULL);
+        FUNC_PTR FUN_D3D12CreateDevice = (FUNC_PTR)GetProcAddress(GetModuleHandleA("d3d12"), "D3D12CreateDevice");
+        ASSERT(FUN_D3D12CreateDevice != NULL);
         OLD_D3D12CreateDevice = (decltype(OLD_D3D12CreateDevice))API.Hook->HookFunction(
-                (FUNC_PTR)cd,
+                (FUNC_PTR)FUN_D3D12CreateDevice,
                 (FUNC_PTR)FAKE_D3D12CreateDevice
         );
 }
@@ -292,13 +292,13 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 #endif // DEBUG
 
         ASSERT(OLD_Present == NULL);
-        {
-                auto s = GetSettingsMutable();
-                API.Config->Init(BetterAPIName);
-                API.Config->BindInt(BIND_INT_DEFAULT(s->ConsoleHotkey));
-                API.Config->BindInt(BIND_INT_DEFAULT(s->FontScaleOverride));
-                API.Config->BindInt(BIND_INT_DEFAULT(s->HotkeyModifier));
-        }
+
+        auto s = GetSettingsMutable();
+        API.Config->Open(BetterAPIName);
+        API.Config->BindInt(BIND_INT_DEFAULT(s->ConsoleHotkey));
+        API.Config->BindInt(BIND_INT_DEFAULT(s->FontScaleOverride));
+        API.Config->BindInt(BIND_INT_DEFAULT(s->HotkeyModifier));
+        API.Config->Close();
 
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;

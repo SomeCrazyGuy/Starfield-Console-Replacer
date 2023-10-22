@@ -110,12 +110,17 @@ struct callback_api_t {
 /// </summary>
 struct config_api_t {
         /// <summary>
-        /// Called first to allocate internal structures for your settings.
-        /// The handle is invalidated by the next call to Load() from any mod (do not save the handle)
-        /// Usually you would bind all settings from the same function that loads them
-        /// `mod_name` should be unique, all your settings are namespaced with `mod_name` to prevent name collisions.
+        /// Call this function once to begin binding your settings to the settings registry
+        /// `mod_name` should be unique to your mod because settings are namespaced to your mod name
+        ///     and all settings are stored in the same configuration file (known as the config "registry")
         /// </summary>
-        void (*Init)(const char* mod_name);
+        void (*Open)(const char* mod_name);
+
+        /// <summary>
+        /// After you have bound all your settings, call close to mark the settings object ready for the next
+        /// mod to call Open(). It is a fatal error for your mod to let another mod call Open() before you call Close().
+        /// </summary>
+        void (*Close)();
 
         /// <summary>
         /// Bind an int* to the settings system and register it to the string `name`
