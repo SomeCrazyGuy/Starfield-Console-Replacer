@@ -43,37 +43,41 @@ static bool should_show_ui = false;
 static HWND window_handle = nullptr;
 
 
-
+#ifdef _DEBUG
 static void DebugLog(const char* func, int line, const char* fmt, ...) {
-        static char line_buffer[128];
         static char format_buffer[4096];
-        static FILE* debugfile = nullptr;
-        
+        static HANDLE debugfile = INVALID_HANDLE_VALUE;
+
+        constexpr auto buffer_size = sizeof(format_buffer);
+        auto bytes = snprintf(format_buffer, buffer_size, "%s:%d>", func, line);
+        ASSERT(bytes > 0);
+        ASSERT(bytes < buffer_size);
+
         va_list args;
         va_start(args, fmt);
-        vsnprintf(format_buffer, sizeof(format_buffer), fmt, args);
+        bytes += vsnprintf(&format_buffer[bytes], buffer_size - bytes, fmt, args);
         va_end(args);
+        ASSERT(bytes > 0);
+        ASSERT(bytes < buffer_size);
 
-        snprintf(line_buffer, sizeof(line_buffer), "%s:%d>", func, line);
+        format_buffer[bytes++] = '\n';
+        format_buffer[bytes] = '\0';
+        ASSERT(bytes < buffer_size);
 
-        if (debugfile == nullptr) {
-                fopen_s(&debugfile, "debuglog.txt", "wb");
+        if (debugfile == INVALID_HANDLE_VALUE) {
+                debugfile = CreateFileW(L"debuglog.txt", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         }
 
-        ASSERT(debugfile != NULL);
-        fputs(line_buffer, debugfile);
-        fputs(format_buffer, debugfile);
-        fputc('\n', debugfile);
-        fflush(debugfile);
+        ASSERT(debugfile != INVALID_HANDLE_VALUE);
+        WriteFile(debugfile, format_buffer, bytes, NULL, NULL);
+        FlushFileBuffers(debugfile);
 }
-#ifdef _DEBUG
 #define Debug(...) do { DebugLog(__func__, __LINE__, " " __VA_ARGS__); } while(0)
+#define Coverage() do { static bool b111 = false; if (!b111){ b111 = true; Debug("coverage marker"); }} while(0)
 #else
 #define Debug(...) do {} while(0)
+#define Coverage() do {} while(0)
 #endif // _DEBUG
-
-
-
 
 
 
@@ -100,6 +104,7 @@ extern const ModMenuSettings* GetSettings() {
 
 static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
         auto ret = OLD_CreateCommandQueue(This, pDesc, riid, ppCommandQueue);
+        Debug();
         if(!d3d12CommandQueue) d3d12CommandQueue = *(ID3D12CommandQueue**)ppCommandQueue;
         return ret;
 }
@@ -235,38 +240,46 @@ static HRESULT FAKE_D3D12CreateDevice(IUnknown* pAdapter, D3D_FEATURE_LEVEL Mini
 }
 
 
-static void HookDX12() {
-        // Currently not compatible with dlss 3 frame generation, but the user wont know that unless we tell them
-        if (GetModuleHandleA("nvngx_dlssg")) {
-                MessageBoxA(NULL,
-                        BetterAPIName " is currently not compatible with mods that load ngngx_dlssg.dll"
-                        " which is used for the optional DLSS3 frame generation feature of some mods"
-                        " in the future compatibility will improve but for now you will need to remove "
-                        "ngngx_dlssg.dll in the nv-streamline folder. NOTE: ngngx_dlss.dll (without the 'g') IS "
-                        "COMPATIBLE with " BetterAPIName " and will continue to be compatible going forward."
-                        " Press OK to exit starfield",
-                        BetterAPIName " Error",
-                        0
-                );
-
-                ExitProcess(1);
-        }
-
-
-        FUNC_PTR FUN_CreateDXGIFactory2 = (FUNC_PTR)GetProcAddress(GetModuleHandleA("dxgi"), "CreateDXGIFactory2");
-        ASSERT(FUN_CreateDXGIFactory2 != NULL);
+static void SetupHooks() {
         OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunction(
-                (FUNC_PTR)FUN_CreateDXGIFactory2,
+                (FUNC_PTR)&CreateDXGIFactory2,
                 (FUNC_PTR)FAKE_CreateDXGIFactory2
         );
+        Debug("Hooked: CreateDXGIFactory2");
 
-
-        FUNC_PTR FUN_D3D12CreateDevice = (FUNC_PTR)GetProcAddress(GetModuleHandleA("d3d12"), "D3D12CreateDevice");
-        ASSERT(FUN_D3D12CreateDevice != NULL);
         OLD_D3D12CreateDevice = (decltype(OLD_D3D12CreateDevice))API.Hook->HookFunction(
-                (FUNC_PTR)FUN_D3D12CreateDevice,
+                (FUNC_PTR)&D3D12CreateDevice,
                 (FUNC_PTR)FAKE_D3D12CreateDevice
         );
+        Debug("Hooked: D3D12CreateDevice");
+
+        // the game uses the rawinput interface to read keyboard and mouse events
+        // if we hook that function we can disable input to the game when the imgui interface is open
+        static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = &GetRawInputData;
+        static decltype(OLD_GetRawInputData) FAKE_GetRawInputData = [](HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) -> UINT {
+                auto ret = OLD_GetRawInputData(hri, cmd, data, data_size, hsize);
+
+                if ((should_show_ui == false) || (data == NULL)) return ret;
+
+                //hide input from the game when shouldshowui is true and data is not null
+                auto input = (RAWINPUT*)data;
+                input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
+                return ret;
+        };
+        OLD_GetRawInputData = (decltype(OLD_GetRawInputData))API.Hook->HookFunction((FUNC_PTR) &GetRawInputData, (FUNC_PTR)FAKE_GetRawInputData);
+        Debug("Hooked: GetRawInputData");
+
+        //i would prefer not hooking multiple win32 apis but its more update-proof than engaging with the game's wndproc
+        static BOOL(*OLD_ClipCursor)(const RECT*) = &ClipCursor;
+        static decltype(OLD_ClipCursor) FAKE_ClipCursor = [](const RECT* rect) -> BOOL {
+                // When the imgui window is open only pass through clipcursor(NULL);
+                if (should_show_ui && (rect != NULL)) {
+                        return true;
+                }
+                return OLD_ClipCursor(rect);
+        };
+        OLD_ClipCursor = (decltype(OLD_ClipCursor))API.Hook->HookFunction((FUNC_PTR)&ClipCursor, (FUNC_PTR)FAKE_ClipCursor);
+        Debug("Hooked: ClipCursor");
 }
 
 
@@ -287,11 +300,16 @@ inline constexpr const char* member_name_only(const char* in) {
 
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
+        Debug("Starting");
+
 #ifdef _DEBUG
         while (!IsDebuggerPresent())Sleep(100);
 #endif // DEBUG
 
         ASSERT(OLD_Present == NULL);
+
+        SetupHooks();
+        Debug("Hooks completed");
 
         auto s = GetSettingsMutable();
         API.Config->Open(BetterAPIName);
@@ -299,6 +317,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         API.Config->BindInt(BIND_INT_DEFAULT(s->FontScaleOverride));
         API.Config->BindInt(BIND_INT_DEFAULT(s->HotkeyModifier));
         API.Config->Close();
+        Debug("Settings Loaded");
 
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;
@@ -306,7 +325,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         //broadcast to all listeners of "BetterConsole" during sfse postpostload
         static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
                 if (msg->type == MessageType_SFSE_PostPostLoad) {
-                        HookDX12();
+                        Debug("Starting PostPostLoad");
 
                         // the modmenu UI is internally imlpemented using the plugin api, it gets coupled here
                         RegisterInternalPlugin(&API);
@@ -315,44 +334,15 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 
                         // The console part of better console is now minimally coupled to the mod menu
                         setup_console(&API);
-                        RegisterRandomizer(&API);
+                        //RegisterRandomizer(&API);
+                        Debug("Completed initialization");
                 }
         };
 
         MyPluginHandle = sfse->GetPluginHandle();
         MessageInterface = (SFSEMessagingInterface*) sfse->QueryInterface(InterfaceID_Messaging);
         MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
-        
-        // the game uses the rawinput interface to read keyboard and mouse events
-        // if we hook that function we can disable input to the game when the imgui interface is open
-        auto huser32 = GetModuleHandleA("user32");
-        ASSERT(huser32 != NULL);
-
-        auto fun_get_rawinput = (FUNC_PTR) GetProcAddress(huser32, "GetRawInputData");
-        static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = nullptr;
-        static decltype(OLD_GetRawInputData) FAKE_GetRawInputData = [](HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) -> UINT {
-                auto ret = OLD_GetRawInputData(hri, cmd, data, data_size, hsize);
-                
-                if ((should_show_ui == false) || (data == NULL)) return ret;
-                
-                //hide input from the game when shouldshowui is true and data is not null
-                auto input = (RAWINPUT*)data;
-                input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
-                return ret;
-        };
-        OLD_GetRawInputData = (decltype(OLD_GetRawInputData))API.Hook->HookFunction(fun_get_rawinput, (FUNC_PTR) FAKE_GetRawInputData);
-
-        //i would prefer not hooking multiple win32 apis but its more update-proof than engaging with the game's wndproc
-        auto fun_clip_cursor = (FUNC_PTR)GetProcAddress(huser32, "ClipCursor");
-        static BOOL(*OLD_ClipCursor)(const RECT*) = nullptr;
-        static decltype(OLD_ClipCursor) FAKE_ClipCursor = [](const RECT* rect) -> BOOL {
-                // When the imgui window is open only pass through clipcursor(NULL);
-                if (should_show_ui && (rect != NULL)) {
-                        return true;
-                }
-                return OLD_ClipCursor(rect);
-        };
-        OLD_ClipCursor = (decltype(OLD_ClipCursor))API.Hook->HookFunction(fun_clip_cursor, (FUNC_PTR)FAKE_ClipCursor);
+        Debug("SFSE registration complete");
 }
 
 
@@ -374,7 +364,6 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         static ImGuiContext* imgui_context = nullptr;
         static unsigned once = 1;
         
-        //once = 0;
         if (once) {
                 once = 0;
 
@@ -447,8 +436,6 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
                 draw_gui();
 
-                //ImGui::ShowDemoWindow();
-
                 ImGui::EndFrame();
                 ImGui::Render();
 
@@ -496,26 +483,47 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
 
 static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+        static bool shift = false;
+        static bool ctrl = false;
+        static bool alt = false;
+
         if (uMsg == WM_KEYDOWN) {
-                // built-in hotkey takes priority
-                if (wParam == GetSettings()->ConsoleHotkey) {
-                        const auto modifier = GetSettings()->HotkeyModifier;
-                        if ((modifier == 0) || (GetKeyState(modifier) < 0)) {
+                if (wParam == VK_SHIFT) {
+                        shift = true;
+                }
+                else if (wParam == VK_CONTROL) {
+                        ctrl = true;
+                }
+                else if (wParam == VK_MENU) {
+                        alt = true;
+                }
+                else if (wParam == GetSettings()->ConsoleHotkey) {
+                        //const auto modifier = GetSettings()->HotkeyModifier;
+                        //if ((modifier == 0) /* || (GetKeyState(modifier) < 0) */ ) { //TODO: this breaks the hotkeymodifier setting
                                 should_show_ui = !should_show_ui;
                                 //when you open or close the UI, settings are saved
                                 SaveSettingsRegistry();
+                        //}
+                }
+                else {
+                        size_t infos_count = 0;
+                        auto infos = GetModInfo(&infos_count);
+                        for (auto i = 0; i < infos_count; ++i) {
+                                if (infos[i].HotkeyCallback) {
+                                        if (infos[i].HotkeyCallback((uint32_t)wParam, shift, ctrl)) break;
+                                }
                         }
                 }
-
-                boolean shift = (GetKeyState(VK_SHIFT) < 0);
-                boolean ctrl = (GetKeyState(VK_CONTROL) < 0);
-          
-                size_t infos_count = 0;
-                auto infos = GetModInfo(&infos_count);
-                for (auto i = 0; i < infos_count; ++i) {
-                        if (infos[i].HotkeyCallback) {
-                                if (infos[i].HotkeyCallback((uint32_t)wParam, shift, ctrl)) break;
-                        }
+        }
+        else if (uMsg == WM_KEYUP) {
+                if (wParam == VK_SHIFT) {
+                        shift = false;
+                }
+                else if (wParam == VK_CONTROL) {
+                        ctrl = false;
+                }
+                else if (wParam == VK_MENU) {
+                        alt = false;
                 }
         }
 
@@ -523,5 +531,6 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 ClipCursor(NULL);
                 ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);
         }
+
         return CallWindowProc(OLD_Wndproc, hWnd, uMsg, wParam, lParam);
 }

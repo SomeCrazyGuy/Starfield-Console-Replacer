@@ -700,7 +700,7 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
     return 0;
 }
 
-
+#if 0
 //--------------------------------------------------------------------------------------------------------
 // DPI-related helpers (optional)
 //--------------------------------------------------------------------------------------------------------
@@ -858,6 +858,8 @@ void ImGui_ImplWin32_EnableAlphaCompositing(void* hwnd)
         ::DwmEnableBlurBehindWindow((HWND)hwnd, &bb);
     }
 }
+
+#endif // Disable these libraries and functions as they are not useful in starfield
 
 //---------------------------------------------------------------------------------------------------------
 
