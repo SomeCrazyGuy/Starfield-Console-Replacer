@@ -21,7 +21,7 @@ inline constexpr auto file_name_only(const char* const in) noexcept -> const cha
         return ++ret;
 }
 #define DEBUG(...) do { DebugImpl(file_name_only(__FILE__), __func__, __LINE__, " " __VA_ARGS__); } while(0)
-#define ASSERT(CONDITION) do { if (CONDITION) { AssertImpl(file_name_only(__FILE__), __func__, __LINE__, " " #CONDITION); } } while(0)
+#define ASSERT(CONDITION) do { if (!(CONDITION)) { AssertImpl(file_name_only(__FILE__), __func__, __LINE__, " " #CONDITION); } } while(0)
 #define IMGUI_DEBUG_PARANOID
 #else
 #define DEBUG(...) do { } while(0)

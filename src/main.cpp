@@ -42,11 +42,11 @@ static bool should_show_ui = false;
 static HWND window_handle = nullptr;
 
 #ifdef MODMENU_DEBUG
+static char format_buffer[4096];
+static constexpr auto buffer_size = sizeof(format_buffer);
 extern void DebugImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept {
-        static char format_buffer[4096];
         static HANDLE debugfile = INVALID_HANDLE_VALUE;
 
-        constexpr auto buffer_size = sizeof(format_buffer);
         auto bytes = snprintf(format_buffer, buffer_size, "%s:%s:%d>", filename, func, line);
         ASSERT(bytes > 0);
         ASSERT(bytes < buffer_size);
@@ -72,9 +72,6 @@ extern void DebugImpl(const char* const filename, const char* const func, int li
 }
 
 extern void AssertImpl [[noreturn]] (const char* const filename, const char* const func, int line, const char* const text) noexcept {
-        static char format_buffer[4096];
-
-        constexpr auto buffer_size = sizeof(format_buffer);
         snprintf(
                 format_buffer,
                 buffer_size,
@@ -87,7 +84,6 @@ extern void AssertImpl [[noreturn]] (const char* const filename, const char* con
                 line,
                 text
         );
-        DebugImpl(filename, func, line, "[ASSERTION FAILURE] '%s'", format_buffer);
         MessageBoxA(NULL, format_buffer, "ASSERTION FAILURE", 0);
         abort();
 }
@@ -117,6 +113,7 @@ extern const ModMenuSettings* GetSettings() {
 
 static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
         auto ret = OLD_CreateCommandQueue(This, pDesc, riid, ppCommandQueue);
+        DEBUG();
         if(!d3d12CommandQueue) d3d12CommandQueue = *(ID3D12CommandQueue**)ppCommandQueue;
         return ret;
 }
@@ -251,8 +248,23 @@ static HRESULT FAKE_D3D12CreateDevice(IUnknown* pAdapter, D3D_FEATURE_LEVEL Mini
         return ret;
 }
 
+// quick hack for structname.membername or struct->member passed to BIND_INT
+inline constexpr const char* member_name_only(const char* in) {
+        while (*in) ++in;
+        --in;
+        while (
+                ((*in >= 'a') && (*in <= 'z')) ||
+                ((*in >= '0') && (*in <= '9')) ||
+                ((*in >= 'A') && (*in <= 'Z'))
+                ) --in;
+        ++in;
+        return in;
+}
 
-static void HookDX12() {
+#define BIND_INT_DEFAULT(INT_PTR) member_name_only(#INT_PTR), &INT_PTR, 0, 0, NULL
+#define BIND_VALUE(VALUE) member_name_only(#VALUE), &VALUE
+
+static void SetupModMenu() {
         // Currently not compatible with dlss 3 frame generation, but the user wont know that unless we tell them
         if (GetModuleHandleA("nvngx_dlssg")) {
                 MessageBoxA(NULL,
@@ -269,95 +281,34 @@ static void HookDX12() {
                 ExitProcess(1);
         }
 
-
-        FUNC_PTR FUN_CreateDXGIFactory2 = (FUNC_PTR)GetProcAddress(GetModuleHandleA("dxgi"), "CreateDXGIFactory2");
-        ASSERT(FUN_CreateDXGIFactory2 != NULL);
-        OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunction(
-                (FUNC_PTR)FUN_CreateDXGIFactory2,
-                (FUNC_PTR)FAKE_CreateDXGIFactory2
-        );
-
-
-        FUNC_PTR FUN_D3D12CreateDevice = (FUNC_PTR)GetProcAddress(GetModuleHandleA("d3d12"), "D3D12CreateDevice");
-        ASSERT(FUN_D3D12CreateDevice != NULL);
-        OLD_D3D12CreateDevice = (decltype(OLD_D3D12CreateDevice))API.Hook->HookFunction(
-                (FUNC_PTR)FUN_D3D12CreateDevice,
-                (FUNC_PTR)FAKE_D3D12CreateDevice
-        );
-}
-
-
-// quick hack for structname.membername or struct->member passed to BIND_INT
-inline constexpr const char* member_name_only(const char* in) {
-        while (*in) ++in;
-        --in;
-        while (
-                ((*in >= 'a') && (*in <= 'z')) ||
-                ((*in >= '0') && (*in <= '9')) ||
-                ((*in >= 'A') && (*in <= 'Z'))
-              ) --in;
-        ++in;
-        return in;
-}
-
-#define BIND_INT_DEFAULT(INT_PTR) member_name_only(#INT_PTR), &INT_PTR, 0, 0, NULL
-
-
-extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
-#ifdef _DEBUG
-        while (!IsDebuggerPresent())Sleep(100);
-#endif // DEBUG
-
-        ASSERT(OLD_Present == NULL);
-
         auto s = GetSettingsMutable();
         API.Config->Open(BetterAPIName);
         API.Config->BindInt(BIND_INT_DEFAULT(s->ConsoleHotkey));
-        API.Config->BindInt(BIND_INT_DEFAULT(s->FontScaleOverride));
+        API.Config->BindInt(BIND_VALUE(s->FontScaleOverride), 50, 300, NULL);
         API.Config->BindInt(BIND_INT_DEFAULT(s->HotkeyModifier));
         API.Config->Close();
+        DEBUG("Settings Loaded");
 
-        static PluginHandle MyPluginHandle;
-        static SFSEMessagingInterface* MessageInterface;
 
-        //broadcast to all listeners of "BetterConsole" during sfse postpostload
-        static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
-                if (msg->type == MessageType_SFSE_PostPostLoad) {
-                        HookDX12();
-
-                        // the modmenu UI is internally imlpemented using the plugin api, it gets coupled here
-                        RegisterInternalPlugin(&API);
-
-                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, (void*) &API, sizeof(API), NULL);
-
-                        // The console part of better console is now minimally coupled to the mod menu
-                        setup_console(&API);
-                        RegisterRandomizer(&API);
-                }
-        };
-
-        MyPluginHandle = sfse->GetPluginHandle();
-        MessageInterface = (SFSEMessagingInterface*) sfse->QueryInterface(InterfaceID_Messaging);
-        MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
-        
         // the game uses the rawinput interface to read keyboard and mouse events
         // if we hook that function we can disable input to the game when the imgui interface is open
         auto huser32 = GetModuleHandleA("user32");
         ASSERT(huser32 != NULL);
 
-        auto fun_get_rawinput = (FUNC_PTR) GetProcAddress(huser32, "GetRawInputData");
+        auto fun_get_rawinput = (FUNC_PTR)GetProcAddress(huser32, "GetRawInputData");
         static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = nullptr;
         static decltype(OLD_GetRawInputData) FAKE_GetRawInputData = [](HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) -> UINT {
                 auto ret = OLD_GetRawInputData(hri, cmd, data, data_size, hsize);
-                
+
                 if ((should_show_ui == false) || (data == NULL)) return ret;
-                
+
                 //hide input from the game when shouldshowui is true and data is not null
                 auto input = (RAWINPUT*)data;
                 input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
                 return ret;
         };
-        OLD_GetRawInputData = (decltype(OLD_GetRawInputData))API.Hook->HookFunction(fun_get_rawinput, (FUNC_PTR) FAKE_GetRawInputData);
+        OLD_GetRawInputData = (decltype(OLD_GetRawInputData))API.Hook->HookFunction(fun_get_rawinput, (FUNC_PTR)FAKE_GetRawInputData);
+        DEBUG("Hooked GetRawInputData");
 
         //i would prefer not hooking multiple win32 apis but its more update-proof than engaging with the game's wndproc
         auto fun_clip_cursor = (FUNC_PTR)GetProcAddress(huser32, "ClipCursor");
@@ -370,6 +321,57 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                 return OLD_ClipCursor(rect);
         };
         OLD_ClipCursor = (decltype(OLD_ClipCursor))API.Hook->HookFunction(fun_clip_cursor, (FUNC_PTR)FAKE_ClipCursor);
+        DEBUG("Hooked ClipCursor");
+
+
+        FUNC_PTR FUN_CreateDXGIFactory2 = (FUNC_PTR)GetProcAddress(GetModuleHandleA("dxgi"), "CreateDXGIFactory2");
+        ASSERT(FUN_CreateDXGIFactory2 != NULL);
+        OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunction(
+                (FUNC_PTR)FUN_CreateDXGIFactory2,
+                (FUNC_PTR)FAKE_CreateDXGIFactory2
+        );
+        DEBUG("Hooked CreateDXGIFactory2");
+
+
+        FUNC_PTR FUN_D3D12CreateDevice = (FUNC_PTR)GetProcAddress(GetModuleHandleA("d3d12"), "D3D12CreateDevice");
+        ASSERT(FUN_D3D12CreateDevice != NULL);
+        OLD_D3D12CreateDevice = (decltype(OLD_D3D12CreateDevice))API.Hook->HookFunction(
+                (FUNC_PTR)FUN_D3D12CreateDevice,
+                (FUNC_PTR)FAKE_D3D12CreateDevice
+        );
+        DEBUG("Hooked D3D12CreateDevice");
+}
+
+extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
+        static PluginHandle MyPluginHandle;
+        static SFSEMessagingInterface* MessageInterface;
+
+        //broadcast to all listeners of "BetterConsole" during sfse postpostload
+        static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
+                if (msg->type == MessageType_SFSE_PostPostLoad) {
+                        DEBUG("SFSE PostPostLoad callback");
+                        SetupModMenu();
+                        DEBUG("Hooks completed");
+
+                        // the modmenu UI is internally imlpemented using the plugin api, it gets coupled here
+                        RegisterInternalPlugin(&API);
+                        DEBUG("RegisterInternalPlugin");
+
+                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, (void*)&API, sizeof(API), NULL);
+                        DEBUG("Dispatch SFSE message");
+
+                        // The console part of better console is now minimally coupled to the mod menu
+                        setup_console(&API);
+                        DEBUG("Console setup");
+
+                        RegisterRandomizer(&API);
+                        DEBUG("Randomizer registered");
+                }
+        };
+
+        MyPluginHandle = sfse->GetPluginHandle();
+        MessageInterface = (SFSEMessagingInterface*)sfse->QueryInterface(InterfaceID_Messaging);
+        MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
 }
 
 

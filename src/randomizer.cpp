@@ -142,7 +142,7 @@ static void RandomizerTab(void*) {
         SimpleDraw->DrawTable(
                 headers,
                 COL_COUNT,
-                (void*)&Commands[0],
+                (void*)Commands.data(),
                 (uint32_t)Commands.size(),
                 [](void* userdata, int row, int id) {
                         auto cmds = reinterpret_cast<RandomizerCommand*>(userdata); //TODO: why am I not getting a warning casting a const* to a non-const*?
