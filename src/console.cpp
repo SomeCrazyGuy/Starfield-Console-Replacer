@@ -1,14 +1,8 @@
-#include "console.h"
-
-#include "../imgui/imgui.h"
+#include "main.h"
 
 #include <varargs.h>
 #include <vector>
-
-#define WIN32_LEAN_AND_MEAN
-#define VC_EXTRA_LEAN
-#include <Windows.h>
-
+#include <ctype.h>
 
 //48 89 5c 24 ?? 48 89 6c 24 ?? 48 89 74 24 ?? 57 b8 30 10 -- the 0x1030 stack size might be too unique
 /*
@@ -86,17 +80,6 @@ static LogBufferHandle HistoryHandle;
 static LogBufferHandle AppLog; // used for debugging
 static std::vector<uint32_t> SearchOutputLines{};
 static std::vector<uint32_t> SearchHistoryLines{};
-
-
-static void Log(const char* fmt, ...) {
-        static char logbuffer[4096];
-        va_list args;
-        va_start(args, fmt);
-        vsnprintf(logbuffer, sizeof(logbuffer), fmt, args);
-        LogBuffer->Append(AppLog, logbuffer);
-        va_end(args);
-}
-
 
 static void init_console() {
         if (ConsoleInit) return;
@@ -302,62 +285,3 @@ extern void setup_console(const BetterAPI* api) {
 }
 
 
-#define HOTKEY_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleHotkeys.txt"
-struct HotkeyBuffer { char text[512]; };
-static HotkeyBuffer Hotkeys[12];
-static LogBufferHandle HotkeyHandle = 0;
-static bool hotkey_init = false;
-
-
-static void init_hotkeys() {
-        hotkey_init = true;
-        HotkeyHandle = LogBuffer->Restore("Hotkeys", HOTKEY_FILE_PATH);
-        LogBuffer->CloseFile(HotkeyHandle);
-        for (uint32_t i = 0; i < LogBuffer->GetLineCount(HotkeyHandle); ++i) {
-                if (i >= 12) break; //to many lines
-                const char* line = LogBuffer->GetLine(HotkeyHandle, i);
-                strncpy_s(Hotkeys[i].text, sizeof(Hotkeys[i].text), line, strlen(line));
-        }
-}
-
-
-static void DrawHotkeyTab(void* imgui) {
-        (void)imgui;
-        if (!ConsoleInit) init_console();
-        if (!hotkey_init) init_hotkeys();
-
-        if (ImGui::Button("Save to " HOTKEY_FILE_PATH)) {
-                LogBuffer->Clear(HotkeyHandle);
-                for (uint32_t i = 0; i < 12; ++i) {
-                        LogBuffer->Append(HotkeyHandle, Hotkeys[i].text);
-                }
-                LogBuffer->Save(HotkeyHandle, HOTKEY_FILE_PATH);
-        }
-
-        char label[32];
-        for (uint32_t i = 0; i < 11; ++i) {
-                ImGui::PushID(i);
-                snprintf(label, sizeof(label), "F%d", i + 13);
-                ImGui::InputText(label, Hotkeys[i].text, sizeof(Hotkeys[i].text));
-                ImGui::PopID();
-        }
-}
-
-static boolean RunHotkey(uint32_t vk_keycode, boolean shift, boolean ctrl) {
-        (void) shift;
-        (void) ctrl;
-
-        if (!ConsoleInit) init_console();
-        if (!hotkey_init) init_hotkeys();
-
-        const auto VKStart = VK_F13;
-        const auto VKEnd = VK_F23;
-
-        if ((vk_keycode >= VKStart) && (vk_keycode <= VKEnd)) {
-                uint32_t hotkey_index = vk_keycode - VKStart;
-                console_run(NULL, Hotkeys[hotkey_index].text);
-                return true;
-        }
-
-        return false;
-}

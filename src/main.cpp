@@ -12,7 +12,6 @@
 
 
 #include "randomizer.h"
-
 #include "internal_plugin.h"
 
 
@@ -42,39 +41,57 @@ static ID3D12CommandQueue* d3d12CommandQueue = nullptr;
 static bool should_show_ui = false;
 static HWND window_handle = nullptr;
 
-
-
-static void DebugLog(const char* func, int line, const char* fmt, ...) {
-        static char line_buffer[128];
+#ifdef MODMENU_DEBUG
+extern void DebugImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept {
         static char format_buffer[4096];
-        static FILE* debugfile = nullptr;
-        
+        static HANDLE debugfile = INVALID_HANDLE_VALUE;
+
+        constexpr auto buffer_size = sizeof(format_buffer);
+        auto bytes = snprintf(format_buffer, buffer_size, "%s:%s:%d>", filename, func, line);
+        ASSERT(bytes > 0);
+        ASSERT(bytes < buffer_size);
+
         va_list args;
         va_start(args, fmt);
-        vsnprintf(format_buffer, sizeof(format_buffer), fmt, args);
+        bytes += vsnprintf(&format_buffer[bytes], buffer_size - bytes, fmt, args);
         va_end(args);
+        ASSERT(bytes > 0);
+        ASSERT(bytes < buffer_size);
 
-        snprintf(line_buffer, sizeof(line_buffer), "%s:%d>", func, line);
+        format_buffer[bytes++] = '\n';
+        format_buffer[bytes] = '\0';
+        ASSERT(bytes < buffer_size);
 
-        if (debugfile == nullptr) {
-                fopen_s(&debugfile, "debuglog.txt", "wb");
+        if (debugfile == INVALID_HANDLE_VALUE) {
+                debugfile = CreateFileW(L"debuglog.txt", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         }
 
-        ASSERT(debugfile != NULL);
-        fputs(line_buffer, debugfile);
-        fputs(format_buffer, debugfile);
-        fputc('\n', debugfile);
-        fflush(debugfile);
+        ASSERT(debugfile != INVALID_HANDLE_VALUE);
+        WriteFile(debugfile, format_buffer, bytes, NULL, NULL);
+        FlushFileBuffers(debugfile);
 }
-#ifdef _DEBUG
-#define Debug(...) do { DebugLog(__func__, __LINE__, " " __VA_ARGS__); } while(0)
-#else
-#define Debug(...) do {} while(0)
-#endif // _DEBUG
 
+extern void AssertImpl [[noreturn]] (const char* const filename, const char* const func, int line, const char* const text) noexcept {
+        static char format_buffer[4096];
 
-
-
+        constexpr auto buffer_size = sizeof(format_buffer);
+        snprintf(
+                format_buffer,
+                buffer_size,
+                "In file     '%s'\n"
+                "In function '%s'\n"
+                "On line     '%d'\n"
+                "Message:    '%s'",
+                filename,
+                func,
+                line,
+                text
+        );
+        DebugImpl(filename, func, line, "[ASSERTION FAILURE] '%s'", format_buffer);
+        MessageBoxA(NULL, format_buffer, "ASSERTION FAILURE", 0);
+        abort();
+}
+#endif
 
 
 //this is where the api* that all clients use comes from
@@ -124,9 +141,9 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
         IDXGIOutput* pRestrictToOutput,
         IDXGISwapChain1** ppSwapChain
 ) {
-        Debug();
+        DEBUG();
         auto ret = OLD_CreateSwapChainForHwnd(This, Device, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
-        Debug("On The other side!");
+        DEBUG("On The other side!");
 
         static bool once = 1;
         if (once) {
@@ -151,7 +168,7 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                         (FUNC_PTR)FAKE_Present
                 );
 
-                Debug("Hooked present!");
+                DEBUG("Hooked present!");
         }
 
         return ret;
@@ -162,7 +179,7 @@ static HRESULT(*OLD_CreateDXGIFactory2)(UINT, REFIID, void**) = nullptr;
 static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactory) {
         auto ret = OLD_CreateDXGIFactory2(Flags, RefID, ppFactory);
 
-        Debug();
+        DEBUG();
 
         static bool once = 1;
         if (once) {
@@ -187,13 +204,13 @@ static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactor
                         CreateSwapChainForHwnd
                 };
 
-                Debug();
+                DEBUG();
                 OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookVirtualTable(
                         *ppFactory,
                         CreateSwapChainForHwnd,
                         (FUNC_PTR) FAKE_CreateSwapChainForHwnd
                 );
-                Debug();
+                DEBUG();
         }
 
         return ret;
@@ -202,7 +219,7 @@ static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactor
 
 static HRESULT (*OLD_D3D12CreateDevice)(IUnknown* pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid, void** ppDevice) = nullptr;
 static HRESULT FAKE_D3D12CreateDevice(IUnknown* pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid, void** ppDevice) {
-        Debug();
+        DEBUG();
         auto ret = OLD_D3D12CreateDevice(pAdapter, MinimumFeatureLevel, riid, ppDevice);
 
         static bool once = 1;
@@ -228,7 +245,7 @@ static HRESULT FAKE_D3D12CreateDevice(IUnknown* pAdapter, D3D_FEATURE_LEVEL Mini
                                 (FUNC_PTR)FAKE_CreateCommandQueue
                         );
 
-                Debug("Hooked CreateCommandQueue");
+                DEBUG("Hooked CreateCommandQueue");
         }
 
         return ret;

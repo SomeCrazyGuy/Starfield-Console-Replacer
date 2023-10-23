@@ -1,4 +1,4 @@
-#include "../betterapi.h"
+#include "main.h"
 
 #include <time.h>
 

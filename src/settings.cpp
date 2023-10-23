@@ -6,6 +6,7 @@
 #include <string>
 
 #include "simpledraw.h"
+#include "internal_plugin.h"
 
 #define SETTINGS_REGISTRY_PATH ".\\Data\\SFSE\\Plugins\\MiniModMenuRegistry.txt"
 
@@ -49,15 +50,16 @@ struct BoundSetting {
         char padding[4];
 };
 
+constexpr SettingsHandle InvalidSettingsHandle = 0xFFFFFFFF;
 
 static std::unordered_map<std::string, std::string> Registry{};
 static ItemArray* Handles{nullptr};
 static std::vector<BoundSetting> Settings{};
-static SettingsHandle CurrentValidSettingsHandle = (SettingsHandle) -1;
+static SettingsHandle CurrentValidSettingsHandle = InvalidSettingsHandle;
 
 
 #define BIND_CHECK(BIND_NAME, BIND_VALUE) do {\
-                ASSERT(CurrentValidSettingsHandle != -1 && "A mod forgot to call OpenSettings() before calling any Bind* function!"); \
+                ASSERT(CurrentValidSettingsHandle != InvalidSettingsHandle && "A mod forgot to call OpenSettings() before calling any Bind* function!"); \
                 ASSERT(BIND_NAME != NULL); \
                 ASSERT(BIND_NAME[0] != '\0'); \
                 ASSERT(BIND_VALUE != NULL); \
@@ -95,7 +97,7 @@ static void OpenSettings(const char* mod_name) {
 
 
 static void CloseSettings() {
-        CurrentValidSettingsHandle = -1;
+        CurrentValidSettingsHandle = InvalidSettingsHandle;
 }
 
 
@@ -375,7 +377,7 @@ extern void draw_settings_tab() {
         SimpleDraw->SelectionList(
                 &selection,
                 Handles,
-                Handles->count,
+                (int)Handles->count,
                 [](const void* items, uint32_t index, char* buffer, uint32_t buffer_size) -> const char* {
                         (void)buffer;
                         (void)buffer_size;

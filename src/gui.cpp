@@ -1,8 +1,6 @@
 #include "main.h"
 #include "gui.h"
-
 #include "settings.h"
-
 #include "simpledraw.h"
 
 static const struct simple_draw_t* const SimpleDraw{GetSimpleDrawAPI()};

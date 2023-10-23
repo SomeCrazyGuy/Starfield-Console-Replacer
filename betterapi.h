@@ -1,8 +1,3 @@
-#define BETTERAPI_ENABLE_ASSERTIONS
-#define BETTERAPI_ENABLE_STD
-
-
-
 #ifndef BETTERAPI_API_H
 #define BETTERAPI_API_H
 
@@ -320,16 +315,6 @@ typedef struct better_api_t {
         const struct callback_api_t* Callback;
         const struct config_api_t* Config;
 } BetterAPI;
-
-#ifdef BETTERAPI_ENABLE_ASSERTIONS
-#include <stdio.h>
-#include <Windows.h>
-#define ASSERT(X) do { if((X)) break; char msg[1024]; snprintf(msg, sizeof(msg), "FILE: %s\nFUNC: %s:%u\n%s", __FILE__, __func__, __LINE__, #X); MessageBoxA(NULL, msg, "Assertion Failure", 0); abort(); }while(0)
-#else
-#define ASSERT(X) do {} while(0)
-#endif // BETTERAPI_ENABLE_ASSERTIONS
-
-
 #endif // !BETTERAPI_API_H
 
 
@@ -339,6 +324,7 @@ typedef struct better_api_t {
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 inline ItemArray* ItemArray_Create(size_t element_size) {
         ItemArray* ret = (ItemArray*)malloc(sizeof(*ret));

@@ -1,16 +1,8 @@
-#include "../betterapi.h"
-
-#include "../imgui/imgui.h"
+#include "main.h"
+#include "util.h"
 
 #include <varargs.h>
 #include <vector>
-
-#define WIN32_LEAN_AND_MEAN
-#define VC_EXTRA_LEAN
-#include <Windows.h>
-
-#include "util.h"
-
 
 
 //48 8b c4 48 89 50 ?? 4c 89 40 ?? 4c 89 48 ?? 55 53 56 57 41 55 41 56 41 57 48 8d
@@ -87,8 +79,8 @@ static void RunRandomCommand() {
                 }
         }
 
-        const int max_weight = Commands.back().weight_total;
-        const int chosen_weight = random_in_range(0, max_weight);
+        const int max_weight = (int)Commands.back().weight_total;
+        const int chosen_weight = (int)random_in_range(0, max_weight);
 
         auto pick = std::lower_bound(
                 Commands.begin(),
@@ -186,7 +178,7 @@ static boolean FilterHotkey(uint32_t vk, boolean shift, boolean ctrl) {
         (void)shift;
         (void)ctrl;
 
-        if (vk == VK_F24) {
+        if (vk == 0x87) { //VK_F24
                 RunRandomCommand();
                 return true;
         }

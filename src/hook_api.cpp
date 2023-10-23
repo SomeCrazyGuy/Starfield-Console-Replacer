@@ -1,4 +1,4 @@
-#include "hook_api.h"
+#include "main.h"
 
 #include "../minhook/MinHook.h"
 

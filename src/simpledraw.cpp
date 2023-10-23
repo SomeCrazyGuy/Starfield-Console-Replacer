@@ -1,8 +1,4 @@
-#include "simpledraw.h"
-
 #include "main.h"
-
-#include "log_buffer.h"
 
 
 static void simple_separator() {
