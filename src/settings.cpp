@@ -262,7 +262,8 @@ static void ParseSettingsRegistry() {
                 if (!*s) continue;                                     //skip blank lines
                 while (*s && (*s != '=')) key += *s++;                 //consume key token
                 while (isspace(key.back())) key.pop_back();            //strip trailing whitespace from key
-                ASSERT(*s++ == '=');                                   //make sure we found the '='
+                ASSERT(*s == '=');                                     //make sure we found the '='
+                ++s;                                                   //skip the '=' character
                 while (*s && isspace(*s)) ++s;                         //skip whitespace between '=' and the start of value
                 while (*s) value += *s++;                              //consume the rest of the line
                 while (isspace(value.back())) value.pop_back();        //trim whitespace from the value

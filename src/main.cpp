@@ -343,6 +343,10 @@ static void SetupModMenu() {
 }
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
+#ifdef _DEBUG
+        while (!IsDebuggerPresent()) Sleep(100);
+#endif // _DEBUG
+
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;
 
