@@ -31,6 +31,7 @@ inline constexpr auto file_name_only(const char* const in) noexcept -> const cha
 
 #define WIN32_LEAN_AND_MEAN
 #define VC_EXTRA_LEAN
+#define STRICT
 
 
 #define BETTERAPI_ENABLE_STD

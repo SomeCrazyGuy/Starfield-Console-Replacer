@@ -62,6 +62,7 @@ static void init_randomizer(const BetterAPI* api) {
         }
 }
 
+
 static void ConsoleRun(const char* command) {
         static void(*RunCommand)(void* consolemgr, const char* command) = (decltype(RunCommand)) HookAPI->Relocate(OFFSET_console_run);
         RunCommand(NULL, command);
@@ -96,11 +97,8 @@ static void RunRandomCommand() {
 
 
 static void RandomizerTab(void*) {
-
         ImGui::Text("Commands: %d", (int)Commands.size());
 
-        ImGui::SameLine();
-        
         if (ImGui::Button("Add")) {
                 RandomizerCommand cmd{};
                 cmd.command[0] = 0;
@@ -127,10 +125,8 @@ static void RandomizerTab(void*) {
                 COL_COUNT
         };
 
-        static const TableHeader headers[COL_COUNT] = {
-                {"Delete", COL_DELETE, false},
-                {"Weight", COL_WEIGHT, false},
-                {"Command Text", COL_COMMAND, true},
+        static const char* table_headers[COL_COUNT] = {
+                "Delete", "Weight", "*Command"
         };
 
         //Roundabout way because simpledraw tables cannot change row count while rendering
@@ -139,8 +135,8 @@ static void RandomizerTab(void*) {
         static int request_delete_command_index;
         request_delete_command_index = -1;
 
-        SimpleDraw->DrawTable(
-                headers,
+        SimpleDraw->Table(
+                table_headers,
                 COL_COUNT,
                 (void*)Commands.data(),
                 (uint32_t)Commands.size(),
@@ -174,6 +170,7 @@ static void RandomizerTab(void*) {
         }
 }
 
+
 static boolean FilterHotkey(uint32_t vk, boolean shift, boolean ctrl) {
         (void)shift;
         (void)ctrl;
@@ -185,6 +182,7 @@ static boolean FilterHotkey(uint32_t vk, boolean shift, boolean ctrl) {
 
         return false;
 }
+
 
 extern void RegisterRandomizer(const BetterAPI* api) {
         init_randomizer(api);

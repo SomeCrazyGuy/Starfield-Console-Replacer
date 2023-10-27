@@ -426,7 +426,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
                 d3d12Device->CreateDescriptorHeap(&descriptorImGuiRender, IID_PPV_ARGS(&d3d12DescriptorHeapImGuiRender));
 
-                ID3D12CommandAllocator* allocator;
+                ID3D12CommandAllocator* allocator{};
                 d3d12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator));
                 ASSERT(allocator != NULL);
                 for (size_t i = 0; i < buffersCounts; i++) {
@@ -435,7 +435,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
                 d3d12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL, IID_PPV_ARGS(&d3d12CommandList));
 
-                D3D12_DESCRIPTOR_HEAP_DESC descriptorBackBuffers;
+                D3D12_DESCRIPTOR_HEAP_DESC descriptorBackBuffers{};
                 descriptorBackBuffers.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
                 descriptorBackBuffers.NumDescriptors = buffersCounts;
                 descriptorBackBuffers.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
@@ -478,7 +478,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 FrameContext& currentFrameContext = frameContext[This->GetCurrentBackBufferIndex()];
                 currentFrameContext.commandAllocator->Reset();
 
-                D3D12_RESOURCE_BARRIER barrier;
+                D3D12_RESOURCE_BARRIER barrier{};
                 barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
                 barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
                 barrier.Transition.pResource = currentFrameContext.main_render_target_resource;
@@ -546,5 +546,6 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 ClipCursor(NULL);
                 ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);
         }
-        return CallWindowProc(OLD_Wndproc, hWnd, uMsg, wParam, lParam);
+
+        return CallWindowProcW(OLD_Wndproc, hWnd, uMsg, wParam, lParam);
 }

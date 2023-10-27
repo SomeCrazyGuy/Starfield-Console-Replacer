@@ -1,5 +1,6 @@
 #include "main.h"
 
+#include <ctype.h>
 
 static void simple_separator() {
         ImGui::Separator();
@@ -52,10 +53,12 @@ static void simple_hbox_right() {
         ImGui::BeginChild("##hbox right");
 }
 
+
 static void simple_hbox_end() {
         ImGui::EndChild();
         ImGui::PopID();
 }
+
 
 //NOTE: this uses em size which is roughly font size + imgui padding and border size
 static void simple_vbox_top(float split, float min_size_em) {
@@ -74,20 +77,17 @@ static void simple_vbox_bottom() {
         ImGui::BeginChild("##vbox bottom");
 }
 
+
 static void simple_vbox_end() {
         ImGui::EndChild();
         ImGui::PopID();
 }
 
 
-static float simple_current_font_size() {
-        return ImGui::GetFontSize();
-}
-
-
 static boolean simple_drag_int(const char* name, int* value, int min, int max) {
         return ImGui::DragInt(name, value, 1.f, min, max);
 }
+
 
 static boolean simple_drag_float(const char* name, float* value, float min, float max) {
         return ImGui::DragFloat(name, value, 1.f, min, max);
@@ -129,11 +129,9 @@ static void simple_show_filtered_log_buffer(LogBufferHandle handle, const uint32
 }
 
 
-
 static void simple_render_log_buffer(LogBufferHandle handle, boolean scrolltobottom) {
         simple_show_filtered_log_buffer(handle, NULL, 0, scrolltobottom);
 }
-
 
 
 static boolean simple_selection_list(int* selected, const void* items_userdata, int item_count, CALLBACK_SELECTIONLIST_TEXT tostring) {
@@ -144,7 +142,6 @@ static boolean simple_selection_list(int* selected, const void* items_userdata, 
         char str[128];
 
         //TODO: because entries that return null are skipped, need to write code to keep iterating until we render enough options
-
         clip.Begin(item_count);
         while (clip.Step()) {
                 for (int i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
@@ -163,10 +160,22 @@ static boolean simple_selection_list(int* selected, const void* items_userdata, 
 }
 
 
-static void simple_draw_table(const TableHeader* headers, uint32_t header_count, void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell) {
+static const char* parse_special_character(const char* const label, char* special) {
+        if (!::isalnum((unsigned char)*label)) {
+                *special = *label;
+                return &label[1];
+        }
+        *special = 0;
+        return label;
+}
+
+
+static void simple_draw_table(const char * const * const headers, uint32_t header_count, void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell) {
         if (ImGui::BeginTable("SimpleDrawTable", header_count, ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable)) {
                 for (uint32_t i = 0; i < header_count; ++i) {
-                        ImGui::TableSetupColumn(headers[i].name, (headers[i].expand) ? ImGuiTableColumnFlags_WidthStretch : ImGuiTableColumnFlags_WidthFixed);
+                        char expand;
+                        const char* label = parse_special_character(headers[i], &expand);
+                        ImGui::TableSetupColumn(label, (expand == '*') ? ImGuiTableColumnFlags_WidthStretch : ImGuiTableColumnFlags_WidthFixed);
                 }
                 ImGui::TableHeadersRow();
 
@@ -179,17 +188,76 @@ static void simple_draw_table(const TableHeader* headers, uint32_t header_count,
                                 for (uint32_t col = 0; col < header_count; ++col) {
                                         if (ImGui::TableSetColumnIndex(col)) {
                                                 ImGui::SetNextItemWidth(-1.f); // fill table cell
-                                                //I'm using a layer of indirection here with the column_id because
-                                                //you may want to reorder the order that table columns are drawn
-                                                //without editing your possibly large switch-case within the draw_cell callback
-                                                //you can use an enum to init the column_id and use the same enum in the switch-case.
-                                                draw_cell(rows_userdata, row, headers[col].column_id);
+                                                draw_cell(rows_userdata, row, col);
                                         }
                                 }
                                 ImGui::PopID();
                         }
                 }
                 ImGui::EndTable();
+        }
+}
+
+
+static void simple_tab_bar(const char* const* const headers, uint32_t header_count, int* state) {
+        ImGui::PushID(state);
+        if (ImGui::BeginTabBar("tabbarwidget")) {
+                for (uint32_t i = 0; i < header_count; ++i) {
+                        ImGui::PushID(i);
+                        if (ImGui::BeginTabItem(headers[i])) {
+                                *state = i;
+                                ImGui::EndTabItem();
+                        }
+                        ImGui::PopID();
+                }
+                ImGui::EndTabBar();
+        }
+        ImGui::PopID();
+}
+
+
+static int simple_button_bar(const char* const* const labels, uint32_t label_count) {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 1.f, 1.f });
+        const auto& style = ImGui::GetStyle();
+        const auto frame_size = style.FramePadding;
+        const auto item_spacing = style.ItemSpacing;
+        const auto button_width_frame = (frame_size.x * 2) + item_spacing.x;
+        const auto area = ImGui::GetContentRegionAvail();
+
+        int ret = -1;
+        float cur_x = 0.f;
+        for (uint32_t i = 0; i < label_count; ++i) {
+                const auto label_size = ImGui::CalcTextSize(labels[i]).x;
+                const auto button_width = label_size + button_width_frame;
+                const bool fits = ((cur_x + button_width) < area.x);
+
+                if (fits) {
+                        if (i) ImGui::SameLine();
+                }
+                else {
+                        cur_x = 0.f;
+                }
+
+                ImGui::PushID(i);
+                if (ImGui::Button(labels[i])) {
+                        ret = (int)i;
+                }
+                ImGui::PopID();
+
+                cur_x += button_width;
+        }
+        ImGui::PopStyleVar();
+        return ret;
+}
+
+
+static void simple_tip(const char* desc) {
+        ImGui::TextDisabled("(?)");
+        if (ImGui::BeginItemTooltip()) {
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+                ImGui::TextUnformatted(desc);
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
         }
 }
 
@@ -206,13 +274,15 @@ static constexpr simple_draw_t SimpleDraw {
         simple_vbox_top,
         simple_vbox_bottom,
         simple_vbox_end,
-        simple_current_font_size,
         simple_drag_int,
         simple_drag_float,
         simple_render_log_buffer,
         simple_show_filtered_log_buffer,
         simple_selection_list,
-        simple_draw_table
+        simple_draw_table,
+        simple_tab_bar,
+        simple_button_bar,
+        simple_tip
 };
 
 

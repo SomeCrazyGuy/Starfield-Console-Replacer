@@ -86,16 +86,6 @@ typedef struct mod_info_t {
 } ModInfo;
 
 
-// information used to draw tables using the simpledraw api, pass an array of these to the DrawTable function
-typedef struct table_header_t {
-        const char* name; // name of the header
-        int column_id; // the "value" of a column, could be an enum, must be unique,
-                        // sent as the column_id parameter of the callback function
-        boolean expand;   // true if this column should expand to fill available space
-        //boolean sortable; // true if this column can be sorted - not implemented yet
-} TableHeader;
-
-
 struct callback_api_t {
         void (*RegisterModInfo)(const ModInfo info);
 };
@@ -212,7 +202,7 @@ struct simple_draw_t {
         // the left region occupies a left_size (eg: .5) fraction of the screen
         // the remaining space is reserved for the HBoxRight() side
         // min_size is a safety minimum number of pixels that hboxleft can be
-        void (*HboxLeft)(float left_size, float min_size);
+        void (*HboxLeft)(float left_size, float min_size_em);
 
         // the counterpart of HBoxLeft 
         // no argument needed, the size is the remaining space not taken up by hbox left
@@ -222,13 +212,9 @@ struct simple_draw_t {
         void (*HBoxEnd)();
 
         //this is the same as hbox, but for vertically separated spaces
-        void (*VboxTop)(float top_size, float min_size);
+        void (*VboxTop)(float top_size, float min_size_em);
         void (*VBoxBottom)();
         void (*VBoxEnd)();
-
-
-        // retrieve the font size, useful for min_size calculation for the h/v box above
-        float (*CurrentFontSize)();
 
 
         // display an int number editor as a draggable slider that is aldo editable
@@ -255,7 +241,14 @@ struct simple_draw_t {
         boolean(*SelectionList)(int* selected, const void* items_userdata, int item_count, CALLBACK_SELECTIONLIST_TEXT tostring);
 
 
-        void (*DrawTable)(const TableHeader* headers, uint32_t header_count, void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell);
+        void (*Table)(const char * const * const headers, uint32_t header_count, void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell);
+
+
+        void (*TabBar)(const char* const* const headers, uint32_t header_count, int* state);
+
+        int (*ButtonBar)(const char* const* const labels, uint32_t label_count);
+
+        void (*Tip)(const char* text);
 };
 
 
