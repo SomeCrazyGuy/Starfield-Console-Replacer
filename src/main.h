@@ -1,6 +1,6 @@
 #pragma once
 
-//#define MODMENU_DEBUG
+#define MODMENU_DEBUG
 
 #ifndef MODMENU_DEBUG
 #ifdef _DEBUG

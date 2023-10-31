@@ -49,7 +49,18 @@ typedef struct item_array_t {
 } ItemArray;
 
 
-// while visual studio (MSVC) lets you cast a function pointer to a void*
+/// <summary>
+/// for the itemarray API, used to sort the elements via user supplied function
+/// similar to qsort()
+/// returns 0 if A == B
+/// returns 1 if A > B
+/// return -1 if A < B
+/// return value is similar to how strcmp() works
+/// </summary>
+typedef int (*ItemSortFunc)(const void* A, const void* B);
+
+
+// while many compilers let you cast a function pointer to a void*
 // the C standard only lets you cast a function pointer to another
 // function pointer. Whatever, but this does help document the API better
 typedef void (*FUNC_PTR)(void);
@@ -137,14 +148,6 @@ struct config_api_t {
         /// The description is optional but provides the user a hint when editing the setting in the UI.
         /// </summary>
         void (*BindSettingString)(const char* name, char* value, uint32_t value_size, const char* description);
-
-        /// <summary>
-        /// Bind any arbitrary (even binary) data to the settings system and register it to the string `name`
-        /// `value` must be static, global, or heap allocated so that the settings system can read/write or save/load at any point.
-        /// `value_size` must be supplied so the settings system knows the maximum number of bytes that `value` will hold.
-        /// The description is optional but provides the user a hint when editing the setting in the UI.
-        /// </summary>
-        void (*BindSettingData)(const char* name, void* value, uint32_t value_size, const char* description);
 
         /*
                 Note: there is no Save function, or any way to directly save values to the config file, saving is performed automatically
@@ -363,6 +366,7 @@ inline void* ItemArray_At(const ItemArray* items, uint32_t index) {
         
         return (void*)(items->data + (items->element_size * index));
 }
+#define ITEMARRAY_AT(ITEMS, INDEX, TYPE) *(TYPE*) ItemArray_At((ITEMS),(INDEX))
 
 
 inline void* ItemArray_Append(ItemArray* items, const void* items_array, uint32_t items_count) {
@@ -405,6 +409,8 @@ inline void* ItemArray_Append(ItemArray* items, const void* items_array, uint32_
 inline void* ItemArray_PushBack(ItemArray* items, const void* item) {
         return ItemArray_Append(items, item, 1);
 }
+#define ITEMARRAY_PUSHBACK(ITEMS, ITEM) ItemArray_PushBack((ITEMS),(void*)&(ITEM))
+
 
 
 //this one is interesting, you cant placement new in C, but you can avoid copying large array items
@@ -432,12 +438,38 @@ inline void ItemArray_Reserve(ItemArray* items, uint32_t count) {
 }
 
 
-// these defines make it a little easier to work with item arrays
-// its easy to forget that you need to pass the pointer of the input even if the input is a pointer already
-// and the output is a pointer to the entry in the array, so must be dereferenced as the right type
-#define ITEMARRAY_TO_ITEM(X) ((const void*)&(X))
+inline void ItemArray_Sort(ItemArray* items, ItemSortFunc fn) {
+        ASSERT(items != NULL);
+        ASSERT(items->element_size != 0);
+        ASSERT(items->data != NULL);
 
-#define ITEMARRAY_FROM_ITEM(TYPE, ITEM) (*(TYPE*)(ITEM))
+        auto count = items->count;
+        auto size = items->element_size;
+        void* T = ItemArray_EmplaceBack(items, 1);
+        auto base = (unsigned char*)items->data;
+        unsigned char swaps = 1;
+        while (swaps && count--) {
+                swaps = 0;
+                for (size_t i = 0; i < count; ++i) {
+                        void* A = base + (size * i);
+                        void* B = base + (size * (i + 1));
+                        auto dir = fn(A, B);
+                        if (dir > 0) {
+                                memcpy(T, A, size);
+                                memcpy(A, B, size);
+                                memcpy(B, T, size);
+                                swaps = 1;
+                        }
+                }
+        }
+        ItemArray_PopBack(items, 1);
+}
+
+// 1 2 3 4 5 6 7 8 - lower_bound(7)
+//       ^ - start at halfway and test, 4 < 7 is true advance index forward [count = 8]
+//           ^ - iteration 2, 6 < 7 is true, advance iterater               [count = 4]
+//             ^ - iteration 3, 7 < 7 is false, step is 0, return           [count = 2]
+
 
 
 #endif // !BETTERAPI_STD

@@ -2,27 +2,13 @@
 
 #include <algorithm>
 #include <vector>
-#include <unordered_map>
-#include <string>
+
+#include <inttypes.h>
 
 #include "simpledraw.h"
 #include "internal_plugin.h"
 
 #define SETTINGS_REGISTRY_PATH ".\\Data\\SFSE\\Plugins\\MiniModMenuRegistry.txt"
-
-
-// Opaque handle for the settings save/load system
-typedef uint32_t SettingsHandle;
-
-enum class SettingType : uint32_t {
-        Undefined,
-        Integer,
-        Boolean,
-        Float,
-        String,
-        Data
-};
-
 
 union SettingValue {
         void* as_data;
@@ -37,36 +23,75 @@ union MinMax {
         float as_float;
 };
 
+struct BoundSetting;
+
+struct SettingMethods {
+        void (*Save)(const BoundSetting* var, FILE* f);
+        void (*Load)(BoundSetting* var, const char* value);
+        void (*Edit)(BoundSetting* var);
+};
+
 
 struct BoundSetting {
         const char* name;
+        const char* mod_name;
         const char* description;
+        const SettingMethods* methods;
         SettingValue value;
-        SettingsHandle handle;
-        SettingType type;
+        uint32_t mod_id;
+        //these below mugh be a more generic union
         MinMax min;
         MinMax max;
         uint32_t value_size; // used for string and data type settings
-        char padding[4];
 };
 
-constexpr SettingsHandle InvalidSettingsHandle = 0xFFFFFFFF;
 
-static std::unordered_map<std::string, std::string> Registry{};
-static ItemArray* Handles{nullptr};
-static std::vector<BoundSetting> Settings{};
-static SettingsHandle CurrentValidSettingsHandle = InvalidSettingsHandle;
+struct ConfigVar {
+        uint64_t hash;
+        const char* key;
+        const char* value;
+        void* padding;
+};
+
+
+static std::vector<const char*> ModNames{};
+static std::vector<BoundSetting> Registry{};
+static std::vector<ConfigVar> ConfigFile{};
+const char* CurrentModName = nullptr;
+uint32_t CurrentModId = 0;
 
 
 #define BIND_CHECK(BIND_NAME, BIND_VALUE) do {\
-                ASSERT(CurrentValidSettingsHandle != InvalidSettingsHandle && "A mod forgot to call OpenSettings() before calling any Bind* function!"); \
+                ASSERT(CurrentModName != nullptr && "A mod forgot to call OpenSettings() before calling any Bind* function!"); \
                 ASSERT(BIND_NAME != NULL); \
                 ASSERT(BIND_NAME[0] != '\0'); \
                 ASSERT(BIND_VALUE != NULL); \
         } while(0)
 
-//foward declare the settings registry initialization function
-static void ParseSettingsRegistry();
+
+static uint64_t hash_fnv1a(const char* key, const char* mod_name) {
+        uint64_t ret = 0xcbf29ce484222325;
+
+        unsigned char c;
+        while (c = *key++) {
+                ret ^= c;
+                ret *= 0x00000100000001B3;
+        }
+
+        if (!mod_name) return ret;
+
+        ret ^= ':';
+        ret *= 0x00000100000001B3;
+
+        while (c = *mod_name++) {
+                ret ^= c;
+                ret *= 0x00000100000001B3;
+        }
+
+        return ret;
+}
+
+static void TurboSettingsParser();
 
 
 // note: the settingshandle is invalidated by the next call to OpenSettings() from any code!
@@ -78,26 +103,68 @@ static void ParseSettingsRegistry();
 static void OpenSettings(const char* mod_name) {
         ASSERT(mod_name != NULL);
         ASSERT(mod_name[0] && "mod_name must not be an empty string!");
-        ASSERT(CurrentValidSettingsHandle == -1 && "A mod did not call CloseSettings() after binding settings!");
+        ASSERT(CurrentModName == NULL && "A mod did not call CloseSettings() after binding settings!");
 
-        //best place to put this
-        
-        ParseSettingsRegistry();
-
-        if (!Handles) {
-                Handles = ItemArray_Create(sizeof(const char*));
-        }
-
-        //TODO: a debug build should iterate all handles and string compare to assert no two handles share the same name
-        auto ret = (SettingsHandle) Handles->count;
-        //Handles.push_back(mod_name);
-        ItemArray_PushBack(Handles, ITEMARRAY_TO_ITEM(mod_name));
-        CurrentValidSettingsHandle = ret;
+        //best place to put this ??        
+        TurboSettingsParser();
+        CurrentModName = mod_name;
+        CurrentModId = (uint32_t)ModNames.size();
+        ModNames.push_back(mod_name);
 }
 
 
 static void CloseSettings() {
-        CurrentValidSettingsHandle = InvalidSettingsHandle;
+        // TODO: perform all the lookup here actually?
+        CurrentModName = nullptr;
+}
+
+
+static const char* LookupVar(const char* name, const char* mod_name) {
+        const auto hash = hash_fnv1a(name, mod_name);
+
+        struct Compare {
+                bool operator()(const ConfigVar& var, const uint64_t hash) {
+                        return var.hash < hash;
+                }
+                bool operator()(const uint64_t hash, const ConfigVar& var) {
+                        return hash < var.hash;
+                }
+        };
+
+        auto range = std::equal_range(ConfigFile.begin(), ConfigFile.end(), hash, Compare{});
+
+        for (auto it = range.first; it != range.second; ++it) {
+                const char* s = name;
+                const char* k = it->key;
+                while (*s && (*s == *k++)) ++s;
+                if (*s) continue;
+                if (*k++ != ':') continue;
+                const char* m = mod_name;
+                while (*m && (*m == *k++)) ++m;
+                if (*m) continue;
+                if (*k) continue;
+                return it->value;
+        }
+
+        return NULL;
+}
+
+
+static void BindSettingData(BoundSetting& s, const char* name, void* value, uint32_t value_size, const SettingMethods* methods, const char* description) {
+        s.name = name;
+        s.mod_name = CurrentModName;
+        s.description = description;
+        s.value.as_data = value;
+        s.methods = methods;
+        s.mod_id = CurrentModId;
+        s.value_size = value_size;
+
+        const char* val = LookupVar(name, CurrentModName);
+        if (val) {
+                s.methods->Load(&s, val);
+        }
+
+        Registry.push_back(s);
 }
 
 
@@ -119,159 +186,203 @@ static void CloseSettings() {
 /// <param name="description"> -- Optional description text for the setting shown to the user in the setting menu</param>
 static void BindSettingInt(const char* name, int* value, int min_value, int max_value, const char* description) {
         BIND_CHECK(name, value);
-        
-        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle };
-        s.type = SettingType::Integer;
+       
+        const static SettingMethods int_methods = {
+                [](const BoundSetting* var, FILE* f){
+                        fprintf(f, "%s:%s=%d\n", var->name, var->mod_name, *var->value.as_int);
+                },
+                [](BoundSetting* var, const char* value){
+                        *var->value.as_int = strtol(value, NULL, 0);
+                },
+                [](BoundSetting* var){
+                        ImGui::DragInt(var->name, var->value.as_int, 1.f, var->min.as_int, var->max.as_int);
+                },
+        };
+
+        if ((min_value | max_value) == 0) {
+                min_value = INT32_MIN;
+                max_value = INT32_MAX;
+        }
+
+        BoundSetting s{};
         s.min.as_int = min_value;
         s.max.as_int = max_value;
-        Settings.push_back(s);
 
-        std::string key = name;
-        key += ':';
-        key += ITEMARRAY_FROM_ITEM(const char*, ItemArray_At(Handles, s.handle));
-
-        auto find = Registry.find(key);
-        if (find == Registry.end()) {
-                LOG("Key (%s) not found in setting registry", key.c_str());
-                return;
-        }
-        *value = (int)strtol(find->second.c_str(), NULL, 0);
-        LOG("Key (%s) found in registry with value (%d)", key.c_str(), *value);
+        BindSettingData(s, name, value, sizeof(*value), &int_methods, description);
 }
 
 
 static void BindSettingFloat(const char* name, float* value, float min_value, float max_value, const char* description) {
         BIND_CHECK(name, value);
 
-        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle};
-        s.type = SettingType::Float;
+        const static SettingMethods float_methods = {
+                [](const BoundSetting* var, FILE* f) {
+                        fprintf(f, "%s:%s=%f\n", var->name, var->mod_name, *var->value.as_float);
+                },
+                [](BoundSetting* var, const char* value) {
+                        *var->value.as_float = strtof(value, NULL);
+                },
+                [](BoundSetting* var) {
+                        ImGui::DragFloat(var->name, var->value.as_float, 1.f, var->min.as_float, var->max.as_float);
+                },
+        };
+
+        if ((min_value == 0.f) && (max_value == 0.f)) {
+                min_value = FLT_MIN;
+                max_value = FLT_MAX;
+        }
+
+        BoundSetting s{};
         s.min.as_float = min_value;
         s.max.as_float = max_value;
-        Settings.push_back(s);
 
-        std::string key = name;
-        key += ':';
-        key += ITEMARRAY_FROM_ITEM(const char*, ItemArray_At(Handles, s.handle));
-
-        auto find = Registry.find(key);
-        if (find == Registry.end()) {
-                LOG("Key (%s) not found in setting registry", key.c_str());
-                return;
-        }
-        *value = strtof(find->second.c_str(), NULL);
-        LOG("Key (%s) found in registry with value (%f)", key.c_str(), *value);
+        BindSettingData(s, name, value, sizeof(*value), &float_methods, description);
 }
 
 
 static void BindSettingBoolean(const char* name, boolean* value, const char* description) {
         BIND_CHECK(name, value);
 
-        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle };
-        s.type = SettingType::Boolean;
-        Settings.push_back(s);
+        const static SettingMethods boolean_methods = {
+                [](const BoundSetting* var, FILE* f) {
+                        fprintf(f, "%s:%s=%s\n", var->name, var->mod_name, (*var->value.as_boolean)? "true" : "false");
+                },
+                [](BoundSetting* var, const char* value) {
+                        *var->value.as_float = (*value == 't');
+                },
+                [](BoundSetting* var) {
+                        ImGui::Checkbox(var->name, (bool*)var->value.as_boolean);
+                },
+        };
 
-        std::string key = name;
-        key += ':';
-        key += ITEMARRAY_FROM_ITEM(const char*, ItemArray_At(Handles, s.handle));
-
-        auto find = Registry.find(key);
-        if (find == Registry.end()) {
-                LOG("Key (%s) not found in setting registry", key.c_str());
-                return;
-        }
-        *value = (0 == strcmp(find->second.c_str(), "true"));
-        LOG("Key (%s) found in registry with value (%s)", key.c_str(), (*value)? "true" : "false");
+        BoundSetting s{};
+        BindSettingData(s, name, value, sizeof(*value), &boolean_methods, description);
 }
 
 
 static void BindSettingString(const char* name, char* value, uint32_t value_size, const char* description) {
         BIND_CHECK(name, value);
 
-        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle };
-        s.type = SettingType::String;
-        s.value_size = value_size;
-
-        Settings.push_back(s);
-
-        std::string key = name;
-        key += ':';
-        key += ITEMARRAY_FROM_ITEM(const char*, ItemArray_At(Handles, s.handle));
-
-        auto find = Registry.find(key);
-        if (find == Registry.end()) {
-                LOG("Key (%s) not found in setting registry", key.c_str());
-                return;
-        }
-        const char* str = find->second.c_str();
-
-        if (*str == '"') {
-                ++str;
-                for (uint32_t i = 0; i < value_size; ++i) {
-                        if (*str == '"') {
-                                value[i] = '\0';
-                                return;
+        const static SettingMethods string_methods = {
+                [](const BoundSetting* var, FILE* f) {
+                        fprintf(f, "%s:%s=\"%s\"\n", var->name, var->mod_name, var->value.as_string);
+                },
+                [](BoundSetting* var, const char* value) {
+                        if (*value != '"') return;
+                        ++value;
+                        for (uint32_t i = 0; i < var->value_size; ++i) {
+                                if (value[i] == '"') {
+                                        var->value.as_string[i] = '\0';
+                                        break;
+                                }
+                                var->value.as_string[i] = value[i];
                         }
-                        value[i] = *str;
+                        var->value.as_string[var->value_size - 1] = '\0';
+                },
+                [](BoundSetting* var) {
+                        ImGui::InputText(var->name, var->value.as_string, var->value_size);
+                },
+        };
+
+        BoundSetting s{};
+        BindSettingData(s, name, value, value_size, &string_methods, description);
+}
+
+
+#include <Windows.h>
+
+static void TurboSettingsParser() {
+        static bool settings_parsed = false;
+        if (settings_parsed) return; //assert?
+        settings_parsed = true;
+
+        //TODO: should the filesystem functions use the 'W' variant to handle unsual paths?
+        auto hFile = CreateFileA(SETTINGS_REGISTRY_PATH, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hFile == INVALID_HANDLE_VALUE) return; //file cannot be opened
+
+        LARGE_INTEGER sizeFile;
+        GetFileSizeEx(hFile, &sizeFile);
+        uint64_t m = sizeFile.QuadPart;
+
+        unsigned char* f = (unsigned char*) VirtualAlloc(NULL, m, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (f == NULL) goto E_FILE;
+
+        DWORD readbytes;
+        if (!ReadFile(hFile, f, (DWORD)m, &readbytes, NULL) || (readbytes != m)) {
+                VirtualFree(f, 0, MEM_RELEASE);
+                goto E_FILE;
+        }
+
+        for(uint64_t p = 0; p < m; ++p) {
+                unsigned char* key{ nullptr };
+                unsigned char* key_end{ nullptr };
+                unsigned char* value{ nullptr };
+                unsigned char* value_end{ nullptr };
+
+                //Parse and extract the start of the key
+                for (uint64_t i = p; i < m; ++i) {
+                        if (f[i] == '\n') continue;
+                        if (!isspace(f[i])) {
+                                key = &f[i];
+                                p = i;
+                                break;
+                        }
                 }
-                memset(value, 0, value_size);
+
+                //find the '=' character (and the end of the key)
+                for (uint64_t i = p; i < m; ++i) {
+                        if (f[i] == '\n') continue;
+                        if (f[i] == '=') {
+                                key_end = &f[i - 1];
+                                //trim the key end of whitespace
+                                while (::isspace(*key_end)) --key_end;
+                                *++key_end = 0; //NULL terminate the key component
+                                p = ++i; //move past the '=' character
+                                break;
+                        }
+                }
+
+                //find the start of the value
+                for (uint64_t i = p; i < m; ++i) {
+                        if (f[i] == '\n') continue;
+                        if (!isspace(f[i])) {
+                                value = &f[i];
+                                p = i;
+                                break;
+                        }
+                }
+
+                //find the end of the value
+                for (uint64_t i = p; i < m; ++i) {
+                        if (f[i] == '\n') {
+                                value_end = &f[i];
+                                //trim the key end of whitespace
+                                while (::isspace(*value_end)) --value_end;
+                                *++value_end = 0; //NULL terminate the value component
+                                p = i;
+                                break;
+                        }
+                }
+
+                uint64_t hash = hash_fnv1a((const char*)key, NULL);
+
+                LOG("TURBO: key(%s), hash(%" PRIx64 ") = value(%s)", key, hash, value);
+                ConfigFile.push_back(ConfigVar{ hash, (const char*)key, (const char*)value, NULL });
         }
 
-        LOG("Key (%s) found in registry with value (%s)", key.c_str(), value);
+E_FILE:
+        ASSERT(CloseHandle(hFile));
+
+        std::sort(
+                ConfigFile.begin(),
+                ConfigFile.end(),
+                [](const ConfigVar& A, const ConfigVar& B) -> bool {
+                        return A.hash < B.hash; 
+                }
+        );
 }
 
 
-
-static void BindSettingData(const char* name, void* value, uint32_t value_size, const char* description) {
-        BIND_CHECK(name, value);
-
-        BoundSetting s{ name, description, SettingValue{value}, CurrentValidSettingsHandle };
-        s.type = SettingType::Data;
-        s.value_size = value_size;
-
-        Settings.push_back(s);
-
-        //TODO: lookup
-        ASSERT(false && "Not Implemented!");
-}
-
-
-static void ParseSettingsRegistry() {
-        static bool registry_parsed = false;
-        if (registry_parsed) return;
-        registry_parsed = true;
-
-        FILE* f = NULL;
-        fopen_s(&f, SETTINGS_REGISTRY_PATH, "rb");
-        if (f == NULL) return;
-
-        char max_line[1024]; //maybe note this limitation somewhere
-
-        std::string key;
-        std::string value;
-
-        // Ultra minimal "key = value" parser, can skip blank (whitespace only) lines, comments are not supported
-        // Because key-value pairs are one per line, newlines '\n' are not allowed in the key or value
-        // The key may not end with whitespace characters (they will be trimmed), and must not contain null or '='
-        // The value may not end with whitespace characters (they will be trimmed), and must not contain null
-        // Only 1023 characters are read from each line (tweakable)
-        while (fgets(max_line, 1024, f)) {                             //max characters per line is 1024 - 1 for null terminator
-                char* s = max_line;                                    //alias the line buffer for terse-ness
-                key.clear();                                           //make sure key is cleared from previous iteration
-                value.clear();                                         //make sure value is cleared from previous iteration
-                while (*s && isspace(*s)) ++s;                         //skip whitespace before the key
-                if (!*s) continue;                                     //skip blank lines
-                while (*s && (*s != '=')) key += *s++;                 //consume key token
-                while (isspace(key.back())) key.pop_back();            //strip trailing whitespace from key
-                ASSERT(*s == '=');                                     //make sure we found the '='
-                ++s;                                                   //skip the '=' character
-                while (*s && isspace(*s)) ++s;                         //skip whitespace between '=' and the start of value
-                while (*s) value += *s++;                              //consume the rest of the line
-                while (isspace(value.back())) value.pop_back();        //trim whitespace from the value
-                Registry[key] = value;                                 //register the key/value pair
-                LOG("Adding key (%s) to settings registry with value (%s)", key.c_str(), value.c_str());
-        }
-        fclose(f);
-}
 
 
 extern void SaveSettingsRegistry() {
@@ -279,32 +390,8 @@ extern void SaveSettingsRegistry() {
         fopen_s(&f, SETTINGS_REGISTRY_PATH, "wb");
         if (f == NULL) return;
 
-        for (const auto& s : Settings) {
-                std::string key = s.name;
-                key += ':';
-                key += ITEMARRAY_FROM_ITEM(const char*, ItemArray_At(Handles, s.handle));;
-
-
-                switch (s.type) {
-                case SettingType::Undefined:
-                        ASSERT(false && "Unreachable!");
-                        break;
-                case SettingType::Integer:
-                        fprintf(f, "%s=%d\n", key.c_str(), *s.value.as_int);
-                        break;
-                case SettingType::Float:
-                        fprintf(f, "%s=%f\n", key.c_str(), *s.value.as_float);
-                        break;
-                case SettingType::Boolean:
-                        fprintf(f, "%s=%s\n", key.c_str(), (*s.value.as_boolean) ? "true" : "false");
-                        break;
-                case SettingType::String:
-                        fprintf(f, "%s=\"%s\"\n", key.c_str(), s.value.as_string);
-                        break;
-                case SettingType::Data:
-                        ASSERT(false && "Unimplemented!");
-                        break;
-                }
+        for (const auto& s : Registry) {
+                s.methods->Save(&s, f);
         }
 
         fclose(f);
@@ -318,54 +405,11 @@ static constexpr const struct config_api_t Config = {
         BindSettingFloat,
         BindSettingBoolean,
         BindSettingString,
-        BindSettingData
 };
 
 
 extern const struct config_api_t* GetConfigAPI() {
         return &Config;
-}
-
-
-
-
-// Only the settings.cpp file knows about the internal configuration of a setting.
-// It is less offensive to have this file also render the UI for settings as well.
-static void gui_edit_setting(BoundSetting& S) {
-        ImGui::Separator();
-        if (S.description) ImGui::Text(S.description);
-
-        switch (S.type) {
-        case SettingType::Undefined:
-                ASSERT(false && "Undefined Setting!");
-                break;
-
-        case SettingType::Integer:
-                // TODO: min / max value
-                ImGui::DragInt(S.name, S.value.as_int);
-                break;
-
-        case SettingType::Float:
-                // TODO: min / max value
-                ImGui::DragFloat(S.name, S.value.as_float);
-                break;
-
-        case SettingType::Boolean:
-                ImGui::Checkbox(S.name, (bool*)S.value.as_boolean);
-                break;
-
-        case SettingType::String:
-                ImGui::InputText(S.name, S.value.as_string, S.value_size);
-                break;
-
-        case SettingType::Data:
-                ASSERT(false && "Not Implemented!");
-                break;
-
-        default:
-                ASSERT(false && "Setting Edit Not Implemented!");
-                break;
-        }
 }
 
 
@@ -377,27 +421,28 @@ extern void draw_settings_tab() {
         SimpleDraw->HboxLeft(0.f, 12.f);
         SimpleDraw->SelectionList(
                 &selection,
-                Handles,
-                (int)Handles->count,
+                ModNames.data(),
+                (int)ModNames.size(),
                 [](const void* items, uint32_t index, char* buffer, uint32_t buffer_size) -> const char* {
                         (void)buffer;
                         (void)buffer_size;
-                        return ITEMARRAY_FROM_ITEM(const char*, ItemArray_At((const ItemArray*)items, index));
+                        const char* const* const names = (const char* const* const)items;
+                        return names[index];
                 });
         SimpleDraw->HBoxRight();
         if (selection != -1) {
                 struct CompareSelection {
                         bool operator()(const BoundSetting& setting, const int i) {
-                                return setting.handle < i;
+                                return setting.mod_id < i;
                         }
                         bool operator()(const int i, const BoundSetting& setting) {
-                                return i < setting.handle;
+                                return i < setting.mod_id;
                         }
                 };
 
                 const auto range = std::equal_range(
-                        Settings.begin(),
-                        Settings.end(),
+                        Registry.begin(),
+                        Registry.end(),
                         selection,
                         CompareSelection{}
                  );
@@ -405,11 +450,11 @@ extern void draw_settings_tab() {
                 // TODO: clipping? or will it be uncommon to have lots of settings in the registry
                 for (auto it = range.first; it != range.second; ++it) {
                         ImGui::PushID(it->name);
-                        gui_edit_setting(*it);
+                        ImGui::Separator();
+                        if (it->description) ImGui::TextUnformatted(it->description);
+                        it->methods->Edit(&*it);
                         ImGui::PopID();
                 }
-
-                
         }
         SimpleDraw->HBoxEnd();
 }
