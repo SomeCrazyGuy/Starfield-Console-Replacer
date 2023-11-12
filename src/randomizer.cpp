@@ -141,7 +141,7 @@ static void RandomizerTab(void*) {
                 (void*)Commands.data(),
                 (uint32_t)Commands.size(),
                 [](void* userdata, int row, int id) {
-                        auto cmds = reinterpret_cast<RandomizerCommand*>(userdata); //TODO: why am I not getting a warning casting a const* to a non-const*?
+                        auto cmds = reinterpret_cast<RandomizerCommand*>(userdata);
                         auto cmd = &cmds[row];
                         switch ((enum column_type) id)
                         {

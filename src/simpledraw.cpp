@@ -96,6 +96,7 @@ static boolean simple_drag_float(const char* name, float* value, float min, floa
 
 // "simple" draw api
 static void simple_show_filtered_log_buffer(LogBufferHandle handle, const uint32_t* lines, uint32_t line_count, boolean scroll_to_bottom) {
+        if (!handle) return; //resist invalid logbuffers
         static const auto LogAPI = GetLogBufferAPI();
         char temp_line[4096];
 
@@ -134,22 +135,22 @@ static void simple_render_log_buffer(LogBufferHandle handle, boolean scrolltobot
 }
 
 
-static boolean simple_selection_list(int* selected, const void* items_userdata, int item_count, CALLBACK_SELECTIONLIST_TEXT tostring) {
-        const int sel = *selected;
+static boolean simple_selection_list(const UIDataList* dl, int* selection) {
+        const int sel = *selection;
         
         boolean ret = false;
         ImGuiListClipper clip;
         char str[128];
 
         //TODO: because entries that return null are skipped, need to write code to keep iterating until we render enough options
-        clip.Begin(item_count);
+        clip.Begin(dl->Count);
         while (clip.Step()) {
                 for (int i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
                         ImGui::PushID(i);
-                        const char* text = tostring(items_userdata, i, str, sizeof(str));
+                        const char* text = dl->ToString(dl->UserData, i, str, sizeof(str));
                         if (text) {
                                 if (ImGui::Selectable(text, (sel == i))) {
-                                        *selected = i;
+                                        *selection = i;
                                         ret = true;
                                 }
                         }

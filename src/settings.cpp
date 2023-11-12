@@ -417,20 +417,21 @@ extern void draw_settings_tab() {
         static const struct simple_draw_t* const SimpleDraw{ GetSimpleDrawAPI() };
 
         static int selection = -1;
+        static UIDataList datalist;
+        static uint32_t first_setting;
+        static uint32_t last_setting;
+
+        datalist.UserData = ModNames.data();
+        datalist.Count = ModNames.size();
+        datalist.ToString = [](const void* userdata, uint32_t index, char* fmt, uint32_t fmt_size) -> const char* {
+                (void)fmt;
+                (void)fmt_size;
+                auto names = (const char* const* const)userdata;
+                return names[index];
+        };
 
         SimpleDraw->HboxLeft(0.f, 12.f);
-        SimpleDraw->SelectionList(
-                &selection,
-                ModNames.data(),
-                (int)ModNames.size(),
-                [](const void* items, uint32_t index, char* buffer, uint32_t buffer_size) -> const char* {
-                        (void)buffer;
-                        (void)buffer_size;
-                        const char* const* const names = (const char* const* const)items;
-                        return names[index];
-                });
-        SimpleDraw->HBoxRight();
-        if (selection != -1) {
+        if (SimpleDraw->SelectionList(&datalist, &selection)) {
                 struct CompareSelection {
                         bool operator()(const BoundSetting& setting, const int i) {
                                 return setting.mod_id < i;
@@ -445,14 +446,20 @@ extern void draw_settings_tab() {
                         Registry.end(),
                         selection,
                         CompareSelection{}
-                 );
+                );
 
+                first_setting = std::distance(Registry.begin(), range.first);
+                last_setting = std::distance(Registry.begin(), range.second);
+        }
+        SimpleDraw->HBoxRight();
+        if (selection != -1) {
                 // TODO: clipping? or will it be uncommon to have lots of settings in the registry
-                for (auto it = range.first; it != range.second; ++it) {
-                        ImGui::PushID(it->name);
+                for (auto i = first_setting; i != last_setting; ++i) {
+                        ImGui::PushID(i);
                         ImGui::Separator();
-                        if (it->description) ImGui::TextUnformatted(it->description);
-                        it->methods->Edit(&*it);
+                        auto& setting = Registry[i];
+                        if (setting.description) ImGui::TextUnformatted(setting.description);
+                        setting.methods->Edit(&setting);
                         ImGui::PopID();
                 }
         }

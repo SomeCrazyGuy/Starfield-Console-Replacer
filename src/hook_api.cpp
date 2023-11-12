@@ -17,16 +17,20 @@ static FUNC_PTR HookFunction(FUNC_PTR old, FUNC_PTR new_func) {
 }
 
 
+static boolean SafeWriteMemory(void* dest, const void* src, unsigned length) {
+        DWORD oldprot, unusedprot;
+        auto vp1 = VirtualProtect(dest, length, PAGE_EXECUTE_READWRITE, &oldprot);
+        memcpy(dest, src, length);
+        auto vp2 = VirtualProtect(dest, length, oldprot, &unusedprot);
+        return (vp1 && vp2);
+}
+
+
 static FUNC_PTR HookVirtualTable(void* class_instance, unsigned method_index, FUNC_PTR new_func) {
         struct class_instance_2 { FUNC_PTR* vtable; };
         auto vtable = ((class_instance_2*)(class_instance))->vtable;
         auto ret = vtable[method_index];
-        DWORD perm;
-        uintptr_t fun = (uintptr_t)&vtable[method_index];
-        VirtualProtect((void*)fun, sizeof(void*), PAGE_EXECUTE_READWRITE, &perm);
-        vtable[method_index] = new_func;
-        DWORD perm2;
-        VirtualProtect((void*)fun, sizeof(void*), perm, &perm2);
+        SafeWriteMemory(&vtable[method_index], &new_func, 8);
         return ret;
 }
 
@@ -39,22 +43,74 @@ static void* Relocate(unsigned offset) {
         return (void*)(imagebase + offset);
 }
 
+template<typename T>
+static inline T RVA(uintptr_t offset) {
+	return (T)Relocate((unsigned int)offset);
+}
 
-static boolean WriteMemory(void* dest, const void* src, unsigned length) {
-        static HANDLE this_process = nullptr;
-        if (!this_process) {
-                this_process = GetCurrentProcess();
-        }
-        SIZE_T bytes_written = 0;
-        auto ret = WriteProcessMemory(this_process, dest, src, length, &bytes_written);
-        return (ret && (bytes_written == length));
+
+typedef FUNC_PTR* IATEntry;
+
+/// <summary>
+/// Search the Import Address Table of the exe (starfield) for the matching function.
+/// dll_name can be null to search all dlls in the iat
+/// returns null if not found or the address of the iat entry on success
+/// </summary>
+/// <param name="dll_name">the dll name (not case sensitive) or null to search all dlls</param>
+/// <param name="func_name">the name of the dll function (same as getprocaddress would use)</param>
+/// <returns>iatentry* on success, null on failure</returns>
+static IATEntry SearchIAT(const char* dll_name, const char* func_name) {
+	auto dosHeaders = RVA<IMAGE_DOS_HEADER*>(0);
+	auto ntHeaders = RVA<const IMAGE_NT_HEADERS64*>(dosHeaders->e_lfanew);
+	auto importsDirectory = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+	auto imports = RVA<const IMAGE_IMPORT_DESCRIPTOR*>(importsDirectory.VirtualAddress);
+        IATEntry ret = nullptr;
+	
+        for (uint64_t i = 0; imports[i].Characteristics; ++i) {
+		auto dname = RVA<const char*>(imports[i].Name);
+		if (dll_name && _stricmp(dname, dll_name) != 0) continue;
+
+		auto names = RVA<const IMAGE_THUNK_DATA64*>(imports[i].OriginalFirstThunk);
+		auto thunks = RVA<IMAGE_THUNK_DATA64*>(imports[i].FirstThunk);
+		for (uint64_t j = 0; thunks[j].u1.AddressOfData; ++j) {
+			auto fname = RVA<const IMAGE_IMPORT_BY_NAME*>(names[j].u1.AddressOfData)->Name;
+
+			if (_stricmp(fname, func_name) == 0) {
+				ret = (IATEntry)&thunks[j].u1.AddressOfData;
+				goto END;
+			}
+		}
+	}
+
+END:
+	return ret;
+}
+
+
+static FUNC_PTR GetProcAddressFromIAT(const char* dll_name, const char* func_name) {
+	auto entry = SearchIAT(dll_name, func_name);
+	if (entry) return *entry;
+	return NULL;
+}
+
+
+static FUNC_PTR HookFunctionIAT(const char* dll_name, const char* func_name, const FUNC_PTR new_function) {
+	auto entry = SearchIAT(dll_name, func_name);
+	FUNC_PTR ret = nullptr;
+	if (entry) {
+                ret = *entry;
+                SafeWriteMemory(entry, &new_function, 8);
+	}
+	return ret;
 }
 
 static constexpr struct hook_api_t HookAPI {
         &HookFunction,
         &HookVirtualTable,
         &Relocate,
-        &WriteMemory
+        &SafeWriteMemory,
+        &GetProcAddressFromIAT,
+        &HookFunctionIAT
 };
 
 extern constexpr const struct hook_api_t* GetHookAPI() {

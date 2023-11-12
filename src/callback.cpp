@@ -9,7 +9,7 @@ static std::vector<ModInfo> Infos{};
 
 extern const ModInfo* GetModInfo(size_t* out_count) {
         *out_count = Infos.size();
-        return (*out_count > 0)? &Infos[0] : nullptr;
+        return Infos.data();
 }
 
 static void RegisterModInfo(const ModInfo info) {

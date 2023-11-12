@@ -6,7 +6,7 @@
 /******************************************************************************
         W A R N I N G !
 
-        Because no other published mods *currenty* rely on this API,
+        Because no other published mods *currently* rely on this API,
         I'm actively working on it and as such breaking it all the time.
         I'm trying to refine the API to best suit plugin development.
 
@@ -93,8 +93,21 @@ typedef struct mod_info_t {
         CALLBACK_HOTKEY      HotkeyCallback; //called on key down, return true if you handled the input. TODO: add hashmap for hotkey filter
         FUNC_PTR             PeriodicCallback; // called every "1 / number of ModInfo" frames
                                                 // for example, if 5 plugins are loaded, this is called every 5 frames
-        LogBufferHandle PluginLog; // show this log in the "modmenu tab\logs tab\mod name" log
+        LogBufferHandle PluginLog; // show this log in the "modmenu tab/logs tab/mod name" log
 } ModInfo;
+
+
+// for some of the more complex UI elements this structure can be used to provide the UI system a list of items to render
+// see the simpledraw selectionlist, table, tabbar, and buttonbar
+typedef struct ui_data_list_t {
+        // some data that your mod uses
+        const void* UserData; 
+        // some callback that can convert that data into a string to be shown in the UI
+        // note that you are provided a temp buffer to use as well if you need to snprintf()
+        const char* (*ToString)(const void* userdata, uint32_t index, char* temp, uint32_t temp_size);
+        // The count of elements to draw
+        uint32_t Count;
+} UIDataList;
 
 
 struct callback_api_t {
@@ -176,6 +189,12 @@ struct hook_api_t {
         // Write memory
         // same as Relocate, use the sfse version if you can
         boolean(*WriteMemory)(void* dest, const void* src, unsigned size);
+
+        // get the address of a function through starfield's import address table
+        FUNC_PTR(*GetProcAddressFromIAT)(const char* dll_name, const char* func_name);
+
+        // hook a function in the Import Address Table of starfield
+        FUNC_PTR(*HookFunctionIAT)(const char* dll_name, const char* func_name, const FUNC_PTR new_function);
 };
 
 // This API allows you to create a basic mod menu without linking to imgui
@@ -241,7 +260,7 @@ struct simple_draw_t {
         void (*ShowFilteredLogBuffer)(LogBufferHandle handle, const uint32_t* lines, uint32_t line_count, boolean scroll_to_bottom);
 
         //if tostring returns null, the entry is skipped
-        boolean(*SelectionList)(int* selected, const void* items_userdata, int item_count, CALLBACK_SELECTIONLIST_TEXT tostring);
+        boolean(*SelectionList)(const UIDataList* datalist, int* selected);
 
 
         void (*Table)(const char * const * const headers, uint32_t header_count, void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell);
@@ -290,6 +309,8 @@ struct log_buffer_api_t {
         // if a logbuffer has a file it is writing, close it
         void (*CloseFile)(LogBufferHandle handle);
 };
+
+
 
 
 // This is all the above struct wrapped up in one place

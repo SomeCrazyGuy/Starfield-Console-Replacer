@@ -54,19 +54,18 @@ extern void draw_gui() {
                         static int selected_log = -1;
                         static LogBufferHandle selected_handle;
 
+                        static UIDataList datalist;
+                        datalist.UserData = infos;
+                        datalist.Count = (uint32_t)infos_count;
+                        datalist.ToString = [](const void* userdata, uint32_t index, char* fmtbuffer, uint32_t fmtbuffer_size) -> const char* {
+                                (void)fmtbuffer;
+                                (void)fmtbuffer_size;
+                                const ModInfo* infos = (const ModInfo*)userdata;
+                                return infos[index].Name;
+                        };
+
                         SimpleDraw->HboxLeft(0.f, 12.f);
-                        const auto selection_changed = SimpleDraw->SelectionList(
-                                &selected_log,
-                                infos,
-                                (int)infos_count,
-                                [](const void* item, uint32_t index, char* out, uint32_t out_size) -> const char* {
-                                        (void)out;
-                                        (void)out_size;
-                                        const auto mod = (ModInfo*)item;
-                                        return (mod[index].PluginLog) ? mod[index].Name : nullptr;
-                                }
-                        );
-                        if (selection_changed) {
+                        if (SimpleDraw->SelectionList(&datalist, &selected_log)) {
                                 selected_handle = infos[selected_log].PluginLog;
                         }
                         SimpleDraw->HBoxRight();

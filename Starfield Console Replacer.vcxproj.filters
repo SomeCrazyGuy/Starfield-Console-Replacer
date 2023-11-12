@@ -15,6 +15,9 @@
     <Filter Include="minhook">
       <UniqueIdentifier>{1a26062c-e9a1-46c1-a416-095168db3265}</UniqueIdentifier>
     </Filter>
+    <Filter Include="vcruntime140_1 interface">
+      <UniqueIdentifier>{1f4e5c3d-97b1-49d7-bc4f-bcf2be8f8854}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -70,6 +73,9 @@
     </ClCompile>
     <ClCompile Include="src\util.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fake_vcruntime140_1.cpp">
+      <Filter>vcruntime140_1 interface</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

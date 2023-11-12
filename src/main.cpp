@@ -158,13 +158,22 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                         Present,
                 };
 
+
+                // need to use a stronger hook here, the steam overlay uses vmt hooks to draw
+                // if the window is resized and this function is called again, we end up in a loop
+                // with the steam overlay
+                FUNC_PTR* fp = *(FUNC_PTR**)*ppSwapChain;
+                OLD_Present = (decltype(OLD_Present))API.Hook->HookFunction(fp[Present], (FUNC_PTR)FAKE_Present);
+                
+                /*
                 OLD_Present =
                         (decltype(OLD_Present))API.Hook->HookVirtualTable(
                         *ppSwapChain,
                         Present,
                         (FUNC_PTR)FAKE_Present
                 );
-
+                */
+                
                 DEBUG("Hooked present!");
         }
 
@@ -265,22 +274,6 @@ inline constexpr const char* member_name_only(const char* in) {
 #define BIND_VALUE(VALUE) member_name_only(#VALUE), &VALUE
 
 static void SetupModMenu() {
-        // Currently not compatible with dlss 3 frame generation, but the user wont know that unless we tell them
-        if (GetModuleHandleA("nvngx_dlssg")) {
-                MessageBoxA(NULL,
-                        BetterAPIName " is currently not compatible with mods that load ngngx_dlssg.dll"
-                        " which is used for the optional DLSS3 frame generation feature of some mods"
-                        " in the future compatibility will improve but for now you will need to remove "
-                        "ngngx_dlssg.dll in the nv-streamline folder. NOTE: ngngx_dlss.dll (without the 'g') IS "
-                        "COMPATIBLE with " BetterAPIName " and will continue to be compatible going forward."
-                        " Press OK to exit starfield",
-                        BetterAPIName " Error",
-                        0
-                );
-
-                ExitProcess(1);
-        }
-
         auto s = GetSettingsMutable();
         API.Config->Open(BetterAPIName);
         API.Config->BindInt(BIND_INT_DEFAULT(s->ConsoleHotkey));
@@ -289,13 +282,6 @@ static void SetupModMenu() {
         API.Config->Close();
         DEBUG("Settings Loaded");
 
-
-        // the game uses the rawinput interface to read keyboard and mouse events
-        // if we hook that function we can disable input to the game when the imgui interface is open
-        auto huser32 = GetModuleHandleA("user32");
-        ASSERT(huser32 != NULL);
-
-        auto fun_get_rawinput = (FUNC_PTR)GetProcAddress(huser32, "GetRawInputData");
         static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = nullptr;
         static decltype(OLD_GetRawInputData) FAKE_GetRawInputData = [](HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) -> UINT {
                 auto ret = OLD_GetRawInputData(hri, cmd, data, data_size, hsize);
@@ -307,11 +293,10 @@ static void SetupModMenu() {
                 input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
                 return ret;
         };
-        OLD_GetRawInputData = (decltype(OLD_GetRawInputData))API.Hook->HookFunction(fun_get_rawinput, (FUNC_PTR)FAKE_GetRawInputData);
-        DEBUG("Hooked GetRawInputData");
+        OLD_GetRawInputData = (decltype(OLD_GetRawInputData)) API.Hook->HookFunctionIAT("user32.dll", "GetRawInputData", (FUNC_PTR)FAKE_GetRawInputData);
+        DEBUG("Hook GetRawInputData: %p", OLD_GetRawInputData);
 
         //i would prefer not hooking multiple win32 apis but its more update-proof than engaging with the game's wndproc
-        auto fun_clip_cursor = (FUNC_PTR)GetProcAddress(huser32, "ClipCursor");
         static BOOL(*OLD_ClipCursor)(const RECT*) = nullptr;
         static decltype(OLD_ClipCursor) FAKE_ClipCursor = [](const RECT* rect) -> BOOL {
                 // When the imgui window is open only pass through clipcursor(NULL);
@@ -320,31 +305,19 @@ static void SetupModMenu() {
                 }
                 return OLD_ClipCursor(rect);
         };
-        OLD_ClipCursor = (decltype(OLD_ClipCursor))API.Hook->HookFunction(fun_clip_cursor, (FUNC_PTR)FAKE_ClipCursor);
-        DEBUG("Hooked ClipCursor");
+        OLD_ClipCursor = (decltype(OLD_ClipCursor)) API.Hook->HookFunctionIAT("user32.dll", "ClipCursor", (FUNC_PTR)FAKE_ClipCursor);
+        DEBUG("Hook ClipCursor: %p", OLD_ClipCursor);
 
+        OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunctionIAT("sl.interposer.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
+        DEBUG("Hook CreateDXGIFactory2: %p", OLD_CreateDXGIFactory2);
 
-        FUNC_PTR FUN_CreateDXGIFactory2 = (FUNC_PTR)GetProcAddress(GetModuleHandleA("dxgi"), "CreateDXGIFactory2");
-        ASSERT(FUN_CreateDXGIFactory2 != NULL);
-        OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunction(
-                (FUNC_PTR)FUN_CreateDXGIFactory2,
-                (FUNC_PTR)FAKE_CreateDXGIFactory2
-        );
-        DEBUG("Hooked CreateDXGIFactory2");
-
-
-        FUNC_PTR FUN_D3D12CreateDevice = (FUNC_PTR)GetProcAddress(GetModuleHandleA("d3d12"), "D3D12CreateDevice");
-        ASSERT(FUN_D3D12CreateDevice != NULL);
-        OLD_D3D12CreateDevice = (decltype(OLD_D3D12CreateDevice))API.Hook->HookFunction(
-                (FUNC_PTR)FUN_D3D12CreateDevice,
-                (FUNC_PTR)FAKE_D3D12CreateDevice
-        );
-        DEBUG("Hooked D3D12CreateDevice");
+        OLD_D3D12CreateDevice = (decltype(OLD_D3D12CreateDevice)) API.Hook->HookFunctionIAT("sl.interposer.dll", "D3D12CreateDevice", (FUNC_PTR)FAKE_D3D12CreateDevice);
+        DEBUG("Hook D3D12CreateDevice: %p", OLD_D3D12CreateDevice);
 }
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
 #ifdef _DEBUG
-        while (!IsDebuggerPresent()) Sleep(100);
+        //while (!IsDebuggerPresent()) Sleep(100);
 #endif // _DEBUG
 
         static PluginHandle MyPluginHandle;
@@ -365,10 +338,10 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                         DEBUG("Dispatch SFSE message");
 
                         // The console part of better console is now minimally coupled to the mod menu
-                        setup_console(&API);
+                        //setup_console(&API);
                         DEBUG("Console setup");
 
-                        RegisterRandomizer(&API);
+                        //RegisterRandomizer(&API);
                         DEBUG("Randomizer registered");
                 }
         };
@@ -376,6 +349,21 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         MyPluginHandle = sfse->GetPluginHandle();
         MessageInterface = (SFSEMessagingInterface*)sfse->QueryInterface(InterfaceID_Messaging);
         MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
+}
+
+// we need to figure out what type of loader was used here
+// could check if we are named vcruntime
+// could check if path is sfse plugin dir
+// could fallback to asi loader called us
+extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD fdwReason, LPVOID) {
+        if (fdwReason == DLL_PROCESS_ATTACH) {
+#ifdef _DEBUG
+                //while (!IsDebuggerPresent()) Sleep(100);
+#endif // _DEBUG
+                //SetupModMenu();
+                CreateThread(NULL, 0, [](void*)->DWORD{ SetupModMenu(); return 0; }, NULL, 0, NULL);
+        }
+        return TRUE;
 }
 
 
@@ -396,11 +384,11 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         //my state
         static ImGuiContext* imgui_context = nullptr;
         static unsigned once = 1;
-        
+
         //once = 0;
         if (once) {
                 once = 0;
-
+                DEBUG("present init started");
                 DXGI_SWAP_CHAIN_DESC sdesc;
                 This->GetDesc(&sdesc);
                 window_handle = sdesc.OutputWindow;
@@ -461,6 +449,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                         d3d12DescriptorHeapImGuiRender->GetGPUDescriptorHandleForHeapStart());
 
                 ImGui_ImplDX12_CreateDeviceObjects();
+                DEBUG("present init complete");
         }
 
         if (should_show_ui) {
@@ -505,14 +494,17 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         // just when you though we were done loading down the main render thread...
         // now we have the periodic callback. these callbacks are spread out over seveal frames
         // each mod can register one callback and that callback will be called every "1 / mod count" frames
-        
+
         size_t infos_count = 0;
         auto infos = GetModInfo(&infos_count);
 
         static uint32_t periodic_id = 0;
-        uint32_t this_frame_callback = periodic_id++ % infos_count;
-        auto callback = infos[this_frame_callback].PeriodicCallback;
-        if (callback) callback();
+        if (infos_count) {
+                ASSERT(infos != NULL);
+                uint32_t this_frame_callback = periodic_id++ % infos_count;
+                auto callback = infos[this_frame_callback].PeriodicCallback;
+                if (callback) callback();
+        }
 
         return OLD_Present(This, SyncInterval, PresentFlags);
 }
@@ -525,6 +517,7 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         const auto modifier = GetSettings()->HotkeyModifier;
                         if ((modifier == 0) || (GetKeyState(modifier) < 0)) {
                                 should_show_ui = !should_show_ui;
+                                DEBUG("ui toggled");
                                 //when you open or close the UI, settings are saved
                                 SaveSettingsRegistry();
                         }
