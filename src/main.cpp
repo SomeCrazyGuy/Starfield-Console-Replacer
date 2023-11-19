@@ -306,8 +306,8 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                         setup_console(&API);
                         DEBUG("Console setup");
 
-                        RegisterRandomizer(&API);
-                        DEBUG("Randomizer registered");
+                        //RegisterRandomizer(&API);
+                        //DEBUG("Randomizer registered");
                 }
         };
 
@@ -456,6 +456,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                                 DEBUG("Queue %p, Swapchain: %p", x.Queue, x.SwapChain);
                                 if (x.SwapChain == This) {
                                         d3d12CommandQueue = x.Queue;
+                                        break;
                                 }
                         }
                         DEBUG("Selecting command queue: %p", d3d12CommandQueue);

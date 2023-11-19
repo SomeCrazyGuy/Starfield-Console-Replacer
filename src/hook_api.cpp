@@ -2,7 +2,6 @@
 
 #include "../minhook/MinHook.h"
 
-
 static FUNC_PTR HookFunction(FUNC_PTR old, FUNC_PTR new_func) {
         //todo: check retval x3, ret!=NULL
         static bool init = false;
@@ -17,12 +16,44 @@ static FUNC_PTR HookFunction(FUNC_PTR old, FUNC_PTR new_func) {
 }
 
 
-static boolean SafeWriteMemory(void* dest, const void* src, unsigned length) {
+template<typename T>
+static inline void VolatileWrite(void* const dest, const void* const src) noexcept {
+        ASSERT((sizeof(T) <= 8) && "x86_64 limits atomic operations to 1, 2, 4, or 8 bytes");
+        ASSERT((0 == (((*(uintptr_t*)dest)) & ((uintptr_t)(sizeof(T) | (sizeof(T) - 1))))) && "Unaligned write to atomic memory is not atomic!!!");
+        volatile T* const Dest = (volatile T* const)dest;
+        const T Src = *(const T* const)src;
+        *Dest = Src;
+}
+
+
+static boolean SafeWriteMemory(void* const dest, const void* const src, const unsigned length) {
         DWORD oldprot, unusedprot;
-        auto vp1 = VirtualProtect(dest, length, PAGE_EXECUTE_READWRITE, &oldprot);
-        memcpy(dest, src, length);
-        auto vp2 = VirtualProtect(dest, length, oldprot, &unusedprot);
-        return (vp1 && vp2);
+        if (VirtualProtect(dest, length, PAGE_EXECUTE_READWRITE, &oldprot) == FALSE) {
+                return 0;
+        }
+
+        //perform atomic operations for small writes up to sizeof(void*)
+        //x86_64 can have strong atomic guarantees for these sizes
+        switch (length) {
+        case 1:
+                VolatileWrite<uint8_t>(dest, src);
+                break;
+        case 2:
+                VolatileWrite<uint16_t>(dest, src);
+                break;
+        case 4:
+                VolatileWrite<uint32_t>(dest, src);
+                break;
+        case 8:
+                VolatileWrite<uint64_t>(dest, src);
+                break;
+        default:
+                memcpy(dest, src, length);
+                break;
+        }
+        //lol at compiler warning coverting between BOOL and boolean, 2 interfaces unnecessary because bool exists
+        //now i feel like im programming in javascript with the dumb "!!" trick
+        return !!VirtualProtect(dest, length, oldprot, &unusedprot);
 }
 
 

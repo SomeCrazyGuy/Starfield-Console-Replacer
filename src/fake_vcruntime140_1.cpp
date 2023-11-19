@@ -12,6 +12,6 @@
 
 
  extern "C" EXCEPTION_DISPOSITION __declspec(dllexport) __CxxFrameHandler4(void*, void*, void*, void*) {
-        //todo, forward this to the real one?
+        //todo: forward this to the real one?
         fatal_error(__func__);
 }

@@ -28,7 +28,7 @@
 #define BetterAPIMessageType 1
 
 // in your sfse RegisterListener() use this as the sender name
-#define BetterAPIName "Mini Mod Menu"
+#define BetterAPIName "ImGuiInjector"
 
 
 // This file no dependencies and is plain C (C89 maybe? a 34 year old language)
