@@ -37,7 +37,7 @@ static decltype(FAKE_Present)* OLD_Present = nullptr;
 static decltype(FAKE_Wndproc)* OLD_Wndproc = nullptr;
 static decltype(FAKE_CreateCommandQueue)* OLD_CreateCommandQueue = nullptr;
 
-static ID3D12CommandQueue* d3d12CommandQueue = nullptr;
+//static ID3D12CommandQueue* d3d12CommandQueue = nullptr;
 static bool should_show_ui = false;
 static HWND window_handle = nullptr;
 
@@ -111,12 +111,14 @@ extern const ModMenuSettings* GetSettings() {
 }
 
 
-static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue) {
-        auto ret = OLD_CreateCommandQueue(This, pDesc, riid, ppCommandQueue);
-        DEBUG();
-        if(!d3d12CommandQueue) d3d12CommandQueue = *(ID3D12CommandQueue**)ppCommandQueue;
-        return ret;
-}
+#define MAX_QUEUES 16
+struct SwapChainQueue {
+        ID3D12CommandQueue* Queue;
+        IDXGISwapChain* SwapChain;
+} static Queues[MAX_QUEUES];
+
+static unsigned QueueIndex = 0;
+
 
 
 static HRESULT(*OLD_CreateSwapChainForHwnd)(
@@ -138,9 +140,11 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
         IDXGIOutput* pRestrictToOutput,
         IDXGISwapChain1** ppSwapChain
 ) {
-        DEBUG();
         auto ret = OLD_CreateSwapChainForHwnd(This, Device, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
-        DEBUG("On The other side!");
+        DEBUG("Factory: %p, Device: %p, HWND: %p, SwapChain: %p", This, Device, hWnd, *ppSwapChain);
+        //TODO: the device parameter of this function is actually a commandqueue, I need that!
+        ASSERT(QueueIndex < MAX_QUEUES);
+        Queues[QueueIndex++] = { (ID3D12CommandQueue*)Device, *ppSwapChain };
 
         static bool once = 1;
         if (once) {
@@ -184,8 +188,7 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
 static HRESULT(*OLD_CreateDXGIFactory2)(UINT, REFIID, void**) = nullptr;
 static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactory) {
         auto ret = OLD_CreateDXGIFactory2(Flags, RefID, ppFactory);
-
-        DEBUG();
+        DEBUG("Factory: %p", *ppFactory);
 
         static bool once = 1;
         if (once) {
@@ -210,48 +213,12 @@ static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactor
                         CreateSwapChainForHwnd
                 };
 
-                DEBUG();
                 OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookVirtualTable(
                         *ppFactory,
                         CreateSwapChainForHwnd,
                         (FUNC_PTR) FAKE_CreateSwapChainForHwnd
                 );
-                DEBUG();
-        }
-
-        return ret;
-}
-
-
-static HRESULT (*OLD_D3D12CreateDevice)(IUnknown* pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid, void** ppDevice) = nullptr;
-static HRESULT FAKE_D3D12CreateDevice(IUnknown* pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid, void** ppDevice) {
-        DEBUG();
-        auto ret = OLD_D3D12CreateDevice(pAdapter, MinimumFeatureLevel, riid, ppDevice);
-
-        static bool once = 1;
-        if (once) {
-                once = 0;
-
-                enum : unsigned {
-                        QueryInterface,
-                        AddRef,
-                        Release,
-                        GetPrivateData,
-                        SetPrivateData,
-                        SetPrivateDataInterface,
-                        SetName,
-                        GetNodeCount,
-                        CreateCommandQueue
-                };
-
-                OLD_CreateCommandQueue =
-                        (decltype(OLD_CreateCommandQueue))API.Hook->HookVirtualTable(
-                                *ppDevice,
-                                CreateCommandQueue,
-                                (FUNC_PTR)FAKE_CreateCommandQueue
-                        );
-
-                DEBUG("Hooked CreateCommandQueue");
+                DEBUG("Hooked CreateSwapChainForHwnd");
         }
 
         return ret;
@@ -309,10 +276,10 @@ static void SetupModMenu() {
         DEBUG("Hook ClipCursor: %p", OLD_ClipCursor);
 
         OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunctionIAT("sl.interposer.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
+        if (!OLD_CreateDXGIFactory2) {
+                OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2))API.Hook->HookFunctionIAT("dxgi.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
+        }
         DEBUG("Hook CreateDXGIFactory2: %p", OLD_CreateDXGIFactory2);
-
-        OLD_D3D12CreateDevice = (decltype(OLD_D3D12CreateDevice)) API.Hook->HookFunctionIAT("sl.interposer.dll", "D3D12CreateDevice", (FUNC_PTR)FAKE_D3D12CreateDevice);
-        DEBUG("Hook D3D12CreateDevice: %p", OLD_D3D12CreateDevice);
 }
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
@@ -327,8 +294,6 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
         static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
                 if (msg->type == MessageType_SFSE_PostPostLoad) {
                         DEBUG("SFSE PostPostLoad callback");
-                        SetupModMenu();
-                        DEBUG("Hooks completed");
 
                         // the modmenu UI is internally imlpemented using the plugin api, it gets coupled here
                         RegisterInternalPlugin(&API);
@@ -338,10 +303,10 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                         DEBUG("Dispatch SFSE message");
 
                         // The console part of better console is now minimally coupled to the mod menu
-                        //setup_console(&API);
+                        setup_console(&API);
                         DEBUG("Console setup");
 
-                        //RegisterRandomizer(&API);
+                        RegisterRandomizer(&API);
                         DEBUG("Randomizer registered");
                 }
         };
@@ -357,10 +322,6 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 // could fallback to asi loader called us
 extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD fdwReason, LPVOID) {
         if (fdwReason == DLL_PROCESS_ATTACH) {
-#ifdef _DEBUG
-                //while (!IsDebuggerPresent()) Sleep(100);
-#endif // _DEBUG
-                //SetupModMenu();
                 CreateThread(NULL, 0, [](void*)->DWORD{ SetupModMenu(); return 0; }, NULL, 0, NULL);
         }
         return TRUE;
@@ -375,6 +336,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         };
 
         static ID3D12Device* d3d12Device = nullptr;
+        static ID3D12CommandQueue* d3d12CommandQueue = nullptr;
         static ID3D12DescriptorHeap* d3d12DescriptorHeapBackBuffers = nullptr;
         static ID3D12DescriptorHeap* d3d12DescriptorHeapImGuiRender = nullptr;
         static ID3D12GraphicsCommandList* d3d12CommandList = nullptr;
@@ -388,7 +350,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         //once = 0;
         if (once) {
                 once = 0;
-                DEBUG("present init started");
+                DEBUG("RenderPresent init Swapchain: %p, Sync %u, Flags: %u", This, SyncInterval, PresentFlags);
                 DXGI_SWAP_CHAIN_DESC sdesc;
                 This->GetDesc(&sdesc);
                 window_handle = sdesc.OutputWindow;
@@ -487,7 +449,19 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
                 d3d12CommandList->ResourceBarrier(1, &barrier);
                 d3d12CommandList->Close();
+                
 
+                if (!d3d12CommandQueue) {
+                        for (const auto& x : Queues) {
+                                DEBUG("Queue %p, Swapchain: %p", x.Queue, x.SwapChain);
+                                if (x.SwapChain == This) {
+                                        d3d12CommandQueue = x.Queue;
+                                }
+                        }
+                        DEBUG("Selecting command queue: %p", d3d12CommandQueue);
+                }
+
+                
                 d3d12CommandQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList* const*>(&d3d12CommandList));
         }
 

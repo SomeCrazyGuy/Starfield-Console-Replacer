@@ -6,7 +6,7 @@
 /******************************************************************************
         W A R N I N G !
 
-        Because no other published mods *currently* rely on this API,
+        Because no other published mods *currenty* rely on this API,
         I'm actively working on it and as such breaking it all the time.
         I'm trying to refine the API to best suit plugin development.
 
