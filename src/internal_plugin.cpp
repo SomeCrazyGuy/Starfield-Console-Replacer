@@ -15,7 +15,7 @@ static const char* just_file_name(const char* str) {
                 if (*str == '\\') ret = str;
                 ++str;
         }
-        return ret;
+        return ++ret;
 }
 
 extern void Log(const char* file, const char* func, const int line, const char* fmt, ...) {

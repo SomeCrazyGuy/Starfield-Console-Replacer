@@ -38,7 +38,7 @@ extern void draw_gui() {
         }
 
         auto imgui_context = ImGui::GetCurrentContext();
-        ImGui::Begin("Mod Menu");
+        ImGui::Begin(BetterAPIName " Mod Menu");
         ImGui::SetWindowFontScale(FontScalePercent / 100.f);
         ImGui::BeginTabBar("mod tabs");
 

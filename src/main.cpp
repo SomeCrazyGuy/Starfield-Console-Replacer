@@ -31,11 +31,9 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT PresentFlags);
 static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-static HRESULT FAKE_CreateCommandQueue(ID3D12Device * This, D3D12_COMMAND_QUEUE_DESC * pDesc, REFIID riid, void** ppCommandQueue);
 
 static decltype(FAKE_Present)* OLD_Present = nullptr;
 static decltype(FAKE_Wndproc)* OLD_Wndproc = nullptr;
-static decltype(FAKE_CreateCommandQueue)* OLD_CreateCommandQueue = nullptr;
 
 //static ID3D12CommandQueue* d3d12CommandQueue = nullptr;
 static bool should_show_ui = false;

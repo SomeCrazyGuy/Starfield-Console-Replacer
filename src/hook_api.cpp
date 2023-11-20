@@ -3,21 +3,33 @@
 #include "../minhook/MinHook.h"
 
 static FUNC_PTR HookFunction(FUNC_PTR old, FUNC_PTR new_func) {
-        //todo: check retval x3, ret!=NULL
+        ASSERT(old != NULL);
+        ASSERT(new_func != NULL);
         static bool init = false;
         if (!init) {
-                MH_Initialize(); 
+                if (MH_Initialize() != MH_OK) {
+                        ASSERT(false && "minhook failed to initialize");
+                }
                 init = true;
         }
         FUNC_PTR ret = nullptr;
-        MH_CreateHook(old, new_func, (LPVOID*) &ret);
-        MH_EnableHook(old);
+        if (MH_CreateHook(old, new_func, (LPVOID*)&ret) != MH_OK) {
+                ASSERT(false && "minhook failed to hook function");
+                return NULL;
+        }
+        if (MH_EnableHook(old) != MH_OK) {
+                ASSERT(false && "minhook failed to enable hook");
+                return NULL;
+        };
+        ASSERT(ret != NULL);
         return ret;
 }
 
 
 template<typename T>
 static inline void VolatileWrite(void* const dest, const void* const src) noexcept {
+        ASSERT(dest != NULL);
+        ASSERT(src != NULL);
         ASSERT((sizeof(T) <= 8) && "x86_64 limits atomic operations to 1, 2, 4, or 8 bytes");
         ASSERT((0 == (((*(uintptr_t*)dest)) & ((uintptr_t)(sizeof(T) | (sizeof(T) - 1))))) && "Unaligned write to atomic memory is not atomic!!!");
         volatile T* const Dest = (volatile T* const)dest;
@@ -27,8 +39,12 @@ static inline void VolatileWrite(void* const dest, const void* const src) noexce
 
 
 static boolean SafeWriteMemory(void* const dest, const void* const src, const unsigned length) {
+        ASSERT(dest != NULL);
+        ASSERT(src != NULL);
+        ASSERT(length > 0);
         DWORD oldprot, unusedprot;
         if (VirtualProtect(dest, length, PAGE_EXECUTE_READWRITE, &oldprot) == FALSE) {
+                ASSERT(false && "virtualprotect failed");
                 return 0;
         }
 
@@ -52,16 +68,21 @@ static boolean SafeWriteMemory(void* const dest, const void* const src, const un
                 break;
         }
         //lol at compiler warning coverting between BOOL and boolean, 2 interfaces unnecessary because bool exists
-        //now i feel like im programming in javascript with the dumb "!!" trick
+        //now i feel like im programming in javascript with the dumb "!!" trick but i brought this on myself
         return !!VirtualProtect(dest, length, oldprot, &unusedprot);
 }
 
 
 static FUNC_PTR HookVirtualTable(void* class_instance, unsigned method_index, FUNC_PTR new_func) {
+        ASSERT(class_instance != NULL);
         struct class_instance_2 { FUNC_PTR* vtable; };
         auto vtable = ((class_instance_2*)(class_instance))->vtable;
+        ASSERT(vtable != NULL);
         auto ret = vtable[method_index];
-        SafeWriteMemory(&vtable[method_index], &new_func, 8);
+        ASSERT(ret != NULL);
+        if (!SafeWriteMemory(&vtable[method_index], &new_func, 8)) {
+                ASSERT(false && "safewrite failed");
+        }
         return ret;
 }
 
@@ -71,6 +92,7 @@ static void* Relocate(unsigned offset) {
         if (!imagebase) {
                 imagebase = (uintptr_t)GetModuleHandleW(NULL);
         }
+        ASSERT(imagebase != 0);
         return (void*)(imagebase + offset);
 }
 
@@ -91,6 +113,8 @@ typedef FUNC_PTR* IATEntry;
 /// <param name="func_name">the name of the dll function (same as getprocaddress would use)</param>
 /// <returns>iatentry* on success, null on failure</returns>
 static IATEntry SearchIAT(const char* dll_name, const char* func_name) {
+        ASSERT(func_name != NULL);
+        ASSERT(*func_name != '\0');
 	auto dosHeaders = RVA<IMAGE_DOS_HEADER*>(0);
 	auto ntHeaders = RVA<const IMAGE_NT_HEADERS64*>(dosHeaders->e_lfanew);
 	auto importsDirectory = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];

@@ -95,9 +95,9 @@ static void TurboSettingsParser();
 
 
 // note: the settingshandle is invalidated by the next call to OpenSettings() from any code!
-//       you should always OpenSettings(), then bind all your settings within the same function
-//       then ignore the settingshandle.
-//       the same mod should not call OpenSettings() twice, you only get one valid handle
+//      you should always OpenSettings(), then bind all your settings, then CloseSettings()
+//      preferably all within the same function
+//      the same mod should not call OpenSettings() twice
 //
 // note2: the argument passed to OpenSettings will be the name that shows up in the settings menu
 static void OpenSettings(const char* mod_name) {
@@ -296,7 +296,7 @@ static void TurboSettingsParser() {
         if (settings_parsed) return; //assert?
         settings_parsed = true;
 
-        //TODO: should the filesystem functions use the 'W' variant to handle unsual paths?
+        //TODO: should use the 'W' variant to handle unsual paths?
         auto hFile = CreateFileA(SETTINGS_REGISTRY_PATH, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hFile == INVALID_HANDLE_VALUE) return; //file cannot be opened
 
@@ -366,12 +366,12 @@ static void TurboSettingsParser() {
 
                 uint64_t hash = hash_fnv1a((const char*)key, NULL);
 
-                LOG("TURBO: key(%s), hash(%" PRIx64 ") = value(%s)", key, hash, value);
+                LOG("key(%s), hash(%" PRIx64 ") = value(%s)", key, hash, value);
                 ConfigFile.push_back(ConfigVar{ hash, (const char*)key, (const char*)value, NULL });
         }
 
 E_FILE:
-        ASSERT(CloseHandle(hFile));
+        CloseHandle(hFile);
 
         std::sort(
                 ConfigFile.begin(),
