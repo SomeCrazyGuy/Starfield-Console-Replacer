@@ -213,7 +213,6 @@
     <ClCompile Include="src\internal_plugin.cpp" />
     <ClCompile Include="src\log_buffer.cpp" />
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\randomizer.cpp" />
     <ClCompile Include="src\settings.cpp" />
     <ClCompile Include="src\simpledraw.cpp" />
     <ClCompile Include="src\util.cpp" />
@@ -229,6 +228,7 @@
     <ClInclude Include="imgui\imstb_textedit.h" />
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="minhook\MinHook.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="src\callback.h" />
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\gui.h" />
@@ -236,10 +236,12 @@
     <ClInclude Include="src\internal_plugin.h" />
     <ClInclude Include="src\log_buffer.h" />
     <ClInclude Include="src\main.h" />
-    <ClInclude Include="src\randomizer.h" />
     <ClInclude Include="src\settings.h" />
     <ClInclude Include="src\simpledraw.h" />
     <ClInclude Include="src\util.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="VersionInfo.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

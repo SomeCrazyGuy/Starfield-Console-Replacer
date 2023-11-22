@@ -10,8 +10,6 @@
 #include "console.h"
 #include "settings.h"
 
-
-#include "randomizer.h"
 #include "internal_plugin.h"
 
 
@@ -303,9 +301,6 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
                         // The console part of better console is now minimally coupled to the mod menu
                         setup_console(&API);
                         DEBUG("Console setup");
-
-                        //RegisterRandomizer(&API);
-                        //DEBUG("Randomizer registered");
                 }
         };
 
