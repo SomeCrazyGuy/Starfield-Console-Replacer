@@ -48,10 +48,13 @@ inline constexpr auto file_name_only(const char* const in) noexcept -> const cha
 #include "../imgui/imgui.h"
 
 
+#define BETTERCONSOLE_VERSION "1.2.9"
+
+
 // --------------------------------------------------------------------
 // ---- Change these offsets for each game update                  ----
 // --------------------------------------------------------------------
-constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 7, 36);
+constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 8, 86);
 
 
 

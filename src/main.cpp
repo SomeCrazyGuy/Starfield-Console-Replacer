@@ -237,6 +237,7 @@ inline constexpr const char* member_name_only(const char* in) {
 #define BIND_VALUE(VALUE) member_name_only(#VALUE), &VALUE
 
 static void SetupModMenu() {
+        DEBUG(BetterAPIName " Version: " BETTERCONSOLE_VERSION);
         auto s = GetSettingsMutable();
         API.Config->Open(BetterAPIName);
         API.Config->BindInt(BIND_INT_DEFAULT(s->ConsoleHotkey));
@@ -315,7 +316,8 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 // could fallback to asi loader called us
 extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD fdwReason, LPVOID) {
         if (fdwReason == DLL_PROCESS_ATTACH) {
-                CreateThread(NULL, 0, [](void*)->DWORD{ SetupModMenu(); return 0; }, NULL, 0, NULL);
+                /* lock the linker/dll loader until hooks are installed, TODO: make sure this path is fast */
+                SetupModMenu();
         }
         return TRUE;
 }
@@ -445,14 +447,16 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 
 
                 if (!d3d12CommandQueue) {
-                        for (const auto& x : Queues) {
-                                DEBUG("Queue %p, Swapchain: %p", x.Queue, x.SwapChain);
-                                if (x.SwapChain == This) {
-                                        d3d12CommandQueue = x.Queue;
+                        for (auto i = 0; i < QueueIndex; ++i) {
+                                const auto& q = Queues[i];
+                                DEBUG("Queue %p, Swapchain: %p", q.Queue, q.SwapChain);
+                                if (q.SwapChain == This) {
+                                        d3d12CommandQueue = q.Queue;
                                         break;
                                 }
                         }
                         DEBUG("Selecting command queue: %p", d3d12CommandQueue);
+                        ASSERT(d3d12CommandQueue != NULL);
                 }
 
                 
