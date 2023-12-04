@@ -42,8 +42,6 @@ pcVar15 = "float fresult\nref refr\nset refr to GetSelectedRef\nset fresult to "
 constexpr uint64_t OFFSET_console_run = 0x288d694; //void ConsoleRun(NULL, char* cmd)
 
 
-
-
 #define OUTPUT_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleOutput.txt"
 #define HISTORY_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleHistory.txt"
 
@@ -69,7 +67,6 @@ static bool UpdateFocus = true;
 static int HistoryIndex = -1;
 static InputMode CommandMode = InputMode::Command;
 
-static bool ConsoleInit = false;
 static const BetterAPI* API = nullptr;
 static const hook_api_t* HookAPI = nullptr;
 static const log_buffer_api_t* LogBuffer = nullptr;
@@ -77,36 +74,8 @@ static const simple_draw_t* SimpleDraw = nullptr;
 static char IOBuffer[256 * 1024];
 static LogBufferHandle OutputHandle;
 static LogBufferHandle HistoryHandle;
-static LogBufferHandle AppLog; // used for debugging
 static std::vector<uint32_t> SearchOutputLines{};
 static std::vector<uint32_t> SearchHistoryLines{};
-
-static void init_console() {
-        if (ConsoleInit) return;
-        ConsoleInit = true;
-
-        ASSERT(API != nullptr);
-
-        HookAPI = API->Hook;
-        LogBuffer = API->LogBuffer;
-        SimpleDraw = API->SimpleDraw;
-
-        OutputHandle = LogBuffer->Create("Console Output", OUTPUT_FILE_PATH);
-        HistoryHandle = LogBuffer->Restore("Command History", HISTORY_FILE_PATH);
-
-        OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
-                (FUNC_PTR)HookAPI->Relocate(OFFSET_console_vprint),
-                (FUNC_PTR)console_print
-        );
-
-        OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
-                (FUNC_PTR)HookAPI->Relocate(OFFSET_console_run),
-                (FUNC_PTR)console_run
-        );
-
-        IOBuffer[0] = 0;
-}
-
 
 static void forward_to_old_consoleprint(void* consolemgr, const char* fmt, ...) {
         if (!consolemgr) return;
@@ -120,7 +89,6 @@ static void forward_to_old_consoleprint(void* consolemgr, const char* fmt, ...) 
 static void console_print(void* consolemgr, const char* fmt, va_list args) {
         auto size = vsnprintf(IOBuffer, sizeof(IOBuffer), fmt, args);
         if (size <= 0) return;
-        if (!ConsoleInit) init_console();
         forward_to_old_consoleprint(consolemgr, "%s", IOBuffer); //send it already converted
         LogBuffer->Append(OutputHandle, IOBuffer);
         IOBuffer[0] = 0;
@@ -135,8 +103,6 @@ static void console_run(void* consolemgr, char* cmd) {
 
 static void draw_console_window(void* imgui_context) {
         (void)imgui_context;
-
-        if (!ConsoleInit) init_console();
 
         static bool GameState = true;
         static const char* GameStates[] = { "Paused", "Running" };
@@ -262,26 +228,35 @@ static bool strcasestr(const char* s, const char* find) {
         return true;
 }
 
-static void DrawHotkeyTab(void* imgui);
-static boolean RunHotkey(uint32_t vk_keycode, boolean shift, boolean ctrl);
-
-static void DrawTestLog(void* imgui);
-
 // this should be the only interface between the console replacer and the mod menu code
 extern void setup_console(const BetterAPI* api) {
         API = api;
         LogBuffer = api->LogBuffer;
-        AppLog = LogBuffer->Create("Console App Log", NULL);
 
         ModInfo callbacks{};
         callbacks.Name = "BetterConsole";
         callbacks.DrawTab = &draw_console_window;
-        callbacks.PluginLog = AppLog;
         
         //TODO: twitch integration is broken now
         //callbacks.DrawSettings = &DrawHotkeyTab;
         
         API->Callback->RegisterModInfo(callbacks);
+
+        HookAPI = API->Hook;
+        SimpleDraw = API->SimpleDraw;
+
+        OutputHandle = LogBuffer->Create("Console Output", OUTPUT_FILE_PATH);
+        HistoryHandle = LogBuffer->Restore("Command History", HISTORY_FILE_PATH);
+
+        OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
+                (FUNC_PTR)HookAPI->Relocate(OFFSET_console_vprint),
+                (FUNC_PTR)console_print
+        );
+
+        OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
+                (FUNC_PTR)HookAPI->Relocate(OFFSET_console_run),
+                (FUNC_PTR)console_run
+        );
+
+        IOBuffer[0] = 0;
 }
-
-

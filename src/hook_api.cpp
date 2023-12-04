@@ -31,7 +31,11 @@ static inline void VolatileWrite(void* const dest, const void* const src) noexce
         ASSERT(dest != NULL);
         ASSERT(src != NULL);
         ASSERT((sizeof(T) <= 8) && "x86_64 limits atomic operations to 1, 2, 4, or 8 bytes");
-        ASSERT((0 == (((*(uintptr_t*)dest)) & ((uintptr_t)(sizeof(T) | (sizeof(T) - 1))))) && "Unaligned write to atomic memory is not atomic!!!");
+        const bool is_write_unaligned = ((uintptr_t)dest) & (sizeof(T) - 1);
+        if (is_write_unaligned) {
+                DEBUG("ERROR: write %u bytes to address %p is not atomic", sizeof(T), dest);
+                ASSERT(false && "Unaligned write to atomic memory is not atomic!!!");
+        }
         volatile T* const Dest = (volatile T* const)dest;
         const T Src = *(const T* const)src;
         *Dest = Src;

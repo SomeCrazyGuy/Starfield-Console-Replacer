@@ -5,6 +5,7 @@
 
 #include <dxgi1_6.h>
 #include <d3d12.h>
+#include <intrin.h>
 
 #include "gui.h"
 #include "console.h"
@@ -138,9 +139,10 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
 ) {
         auto ret = OLD_CreateSwapChainForHwnd(This, Device, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
         DEBUG("Factory: %p, Device: %p, HWND: %p, SwapChain: %p", This, Device, hWnd, *ppSwapChain);
-        //TODO: the device parameter of this function is actually a commandqueue, I need that!
+        //the device parameter of this function is actually a commandqueue in dx12
         ASSERT(QueueIndex < MAX_QUEUES);
         Queues[QueueIndex++] = { (ID3D12CommandQueue*)Device, *ppSwapChain };
+        //TODO: we should re-select the command queue in the swapchain::Present() everytime this is called
 
         static bool once = 1;
         if (once) {
@@ -164,19 +166,19 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                 // with the steam overlay
                 FUNC_PTR* fp = *(FUNC_PTR**)*ppSwapChain;
                 OLD_Present = (decltype(OLD_Present))API.Hook->HookFunction(fp[Present], (FUNC_PTR)FAKE_Present);
-                
+
                 /*
                 OLD_Present =
-                        (decltype(OLD_Present))API.Hook->HookVirtualTable(
+                (decltype(OLD_Present))API.Hook->HookVirtualTable(
                         *ppSwapChain,
                         Present,
                         (FUNC_PTR)FAKE_Present
                 );
                 */
-                
+
                 DEBUG("Hooked present!");
         }
-
+        
         return ret;
 }
 
@@ -316,7 +318,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 // could fallback to asi loader called us
 extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD fdwReason, LPVOID) {
         if (fdwReason == DLL_PROCESS_ATTACH) {
-                /* lock the linker/dll loader until hooks are installed, TODO: make sure this path is fast */
+                /* lock the linker/dll loader until hooks are installed, TODO: make sure this code path is fast */
                 SetupModMenu();
         }
         return TRUE;
@@ -447,8 +449,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 
 
                 if (!d3d12CommandQueue) {
-                        for (auto i = 0; i < QueueIndex; ++i) {
-                                const auto& q = Queues[i];
+                        for (const auto& q : Queues) {
                                 DEBUG("Queue %p, Swapchain: %p", q.Queue, q.SwapChain);
                                 if (q.SwapChain == This) {
                                         d3d12CommandQueue = q.Queue;
@@ -478,7 +479,17 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 if (callback) callback();
         }
 
-        return OLD_Present(This, SyncInterval, PresentFlags);
+        // one common cause of crashes is steam overlay hooking ::Present() and getting us into a stack overflow
+        // keep this detection code in place to detect breaking changes to the imgui hook
+        static unsigned loop_check = 0;
+        if (loop_check) {
+                DEBUG("ERROR: recursive present hook detected!");
+                ASSERT(false && "recursive hook detected");
+        }
+        ++loop_check;
+        auto ret = OLD_Present(This, SyncInterval, PresentFlags);
+        --loop_check;
+        return ret;
 }
 
 
