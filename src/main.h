@@ -48,7 +48,7 @@ inline constexpr auto file_name_only(const char* const in) noexcept -> const cha
 #include "../imgui/imgui.h"
 
 
-#define BETTERCONSOLE_VERSION "1.2.9"
+#define BETTERCONSOLE_VERSION "1.2.11"
 
 
 // --------------------------------------------------------------------

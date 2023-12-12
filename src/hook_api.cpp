@@ -37,7 +37,8 @@ static inline void VolatileWrite(void* const dest, const void* const src) noexce
                 ASSERT(false && "Unaligned write to atomic memory is not atomic!!!");
         }
         volatile T* const Dest = (volatile T* const)dest;
-        const T Src = *(const T* const)src;
+        T Src;
+        memcpy(&Src, src, sizeof(Src));
         *Dest = Src;
 }
 

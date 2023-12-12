@@ -91,7 +91,7 @@ static uint64_t hash_fnv1a(const char* key, const char* mod_name) {
         return ret;
 }
 
-static void TurboSettingsParser();
+static bool TurboSettingsParser();
 
 
 // note: the settingshandle is invalidated by the next call to OpenSettings() from any code!
@@ -105,8 +105,11 @@ static void OpenSettings(const char* mod_name) {
         ASSERT(mod_name[0] && "mod_name must not be an empty string!");
         ASSERT(CurrentModName == NULL && "A mod did not call CloseSettings() after binding settings!");
 
-        //best place to put this ??        
-        TurboSettingsParser();
+        //best place to put this ??
+        static bool once = true;
+        if (once) TurboSettingsParser();
+        once = false;
+
         CurrentModName = mod_name;
         CurrentModId = (uint32_t)ModNames.size();
         ModNames.push_back(mod_name);
@@ -291,24 +294,33 @@ static void BindSettingString(const char* name, char* value, uint32_t value_size
 
 #include <Windows.h>
 
-static void TurboSettingsParser() {
-        static bool settings_parsed = false;
-        if (settings_parsed) return; //assert?
-        settings_parsed = true;
+static bool TurboSettingsParser() {
+        bool ret = false;
 
         //TODO: should use the 'W' variant to handle unsual paths?
         auto hFile = CreateFileA(SETTINGS_REGISTRY_PATH, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (hFile == INVALID_HANDLE_VALUE) return; //file cannot be opened
+        if (hFile == INVALID_HANDLE_VALUE) {
+                DEBUG("could not open settings file: %s", SETTINGS_REGISTRY_PATH);
+                return false; //file cannot be opened
+        }
 
         LARGE_INTEGER sizeFile;
-        GetFileSizeEx(hFile, &sizeFile);
+        if (!GetFileSizeEx(hFile, &sizeFile)) {
+                DEBUG("could not get size of settings file: %s", SETTINGS_REGISTRY_PATH);
+                CloseHandle(hFile);
+                return false;
+        }
         uint64_t m = sizeFile.QuadPart;
 
         unsigned char* f = (unsigned char*) VirtualAlloc(NULL, m, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-        if (f == NULL) goto E_FILE;
+        if (f == NULL) {
+                DEBUG("could not allocate " PRIu64 " bytes for settings file", m);
+                goto E_FILE;
+        }
 
         DWORD readbytes;
         if (!ReadFile(hFile, f, (DWORD)m, &readbytes, NULL) || (readbytes != m)) {
+                DEBUG("could not read from settings registry");
                 VirtualFree(f, 0, MEM_RELEASE);
                 goto E_FILE;
         }
@@ -370,16 +382,22 @@ static void TurboSettingsParser() {
                 ConfigFile.push_back(ConfigVar{ hash, (const char*)key, (const char*)value, NULL });
         }
 
-E_FILE:
-        CloseHandle(hFile);
+        ret = true;
 
         std::sort(
                 ConfigFile.begin(),
                 ConfigFile.end(),
                 [](const ConfigVar& A, const ConfigVar& B) -> bool {
-                        return A.hash < B.hash; 
+                        return A.hash < B.hash;
                 }
         );
+
+E_FILE:
+        if (!CloseHandle(hFile)) {
+                DEBUG("error while closing settings registry");
+        }
+
+        return ret;
 }
 
 
