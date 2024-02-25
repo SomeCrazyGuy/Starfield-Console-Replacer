@@ -12,10 +12,10 @@
 extern void DebugImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept;
 extern void AssertImpl [[noreturn]] (const char* const filename, const char* const func, int line, const char* const text) noexcept;
 inline constexpr auto file_name_only(const char* const in) noexcept -> const char* const {
-        const char* i = in;
-        const char* ret = in;
+        auto i = in;
+        auto ret = in;
         while (*i) {
-                if (*i == '\\') ret = i;
+                if ((*i == '\\') || (*i =='/')) ret = i;
                 ++i;
         }
         return ++ret;
@@ -48,13 +48,13 @@ inline constexpr auto file_name_only(const char* const in) noexcept -> const cha
 #include "../imgui/imgui.h"
 
 
-#define BETTERCONSOLE_VERSION "1.2.11"
+#define BETTERCONSOLE_VERSION "1.2.15"
 
 
 // --------------------------------------------------------------------
 // ---- Change these offsets for each game update                  ----
 // --------------------------------------------------------------------
-constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 8, 86);
+constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 9, 67);
 
 
 

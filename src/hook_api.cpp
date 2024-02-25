@@ -5,6 +5,7 @@
 static FUNC_PTR HookFunction(FUNC_PTR old, FUNC_PTR new_func) {
         ASSERT(old != NULL);
         ASSERT(new_func != NULL);
+        DEBUG("OLD: '%p', NEW: '%p'", old, new_func);
         static bool init = false;
         if (!init) {
                 if (MH_Initialize() != MH_OK) {
@@ -31,7 +32,7 @@ static inline void VolatileWrite(void* const dest, const void* const src) noexce
         ASSERT(dest != NULL);
         ASSERT(src != NULL);
         ASSERT((sizeof(T) <= 8) && "x86_64 limits atomic operations to 1, 2, 4, or 8 bytes");
-        const bool is_write_unaligned = ((uintptr_t)dest) & (sizeof(T) - 1);
+        const auto is_write_unaligned = ((uintptr_t)dest) & (sizeof(T) - 1);
         if (is_write_unaligned) {
                 DEBUG("ERROR: write %u bytes to address %p is not atomic", sizeof(T), dest);
                 ASSERT(false && "Unaligned write to atomic memory is not atomic!!!");
@@ -124,7 +125,6 @@ static IATEntry SearchIAT(const char* dll_name, const char* func_name) {
 	auto ntHeaders = RVA<const IMAGE_NT_HEADERS64*>(dosHeaders->e_lfanew);
 	auto importsDirectory = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
 	auto imports = RVA<const IMAGE_IMPORT_DESCRIPTOR*>(importsDirectory.VirtualAddress);
-        IATEntry ret = nullptr;
 	
         for (uint64_t i = 0; imports[i].Characteristics; ++i) {
 		auto dname = RVA<const char*>(imports[i].Name);
@@ -136,14 +136,12 @@ static IATEntry SearchIAT(const char* dll_name, const char* func_name) {
 			auto fname = RVA<const IMAGE_IMPORT_BY_NAME*>(names[j].u1.AddressOfData)->Name;
 
 			if (_stricmp(fname, func_name) == 0) {
-				ret = (IATEntry)&thunks[j].u1.AddressOfData;
-				goto END;
+				return (IATEntry)&thunks[j].u1.AddressOfData;
 			}
 		}
 	}
 
-END:
-	return ret;
+	return nullptr;
 }
 
 
