@@ -25,7 +25,9 @@
   FUN_140587784(uVar1);
   return;
 */
-constexpr uint64_t OFFSET_console_vprint = 0x28d8ad8; //stolen from sfse, void ConsolePrintV(ConsoleMgr*, const char* fmt, va_list args)
+
+
+constexpr uint64_t OFFSET_console_vprint = 0x286f1d8; //stolen from sfse, void ConsolePrintV(ConsoleMgr*, const char* fmt, va_list args)
 
 
 
@@ -39,8 +41,10 @@ memset(local_c38,0,0x400);
 pcVar15 = "float fresult\nref refr\nset refr to GetSelectedRef\nset fresult to ";
 
 */
-constexpr uint64_t OFFSET_console_run = 0x28d3064; //void ConsoleRun(NULL, char* cmd)
+constexpr uint64_t OFFSET_console_run = 0x2869764; //void ConsoleRun(NULL, char* cmd)
 
+
+//TODO: get the location of betterconsole and spawn the files there?
 
 #define OUTPUT_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleOutput.txt"
 #define HISTORY_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleHistory.txt"

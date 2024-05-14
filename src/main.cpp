@@ -124,6 +124,7 @@ extern const ModMenuSettings* GetSettings() {
 struct SwapChainQueue {
         ID3D12CommandQueue* Queue;
         IDXGISwapChain* SwapChain;
+        uint64_t Age;
 } static Queues[MAX_QUEUES];
 
 
@@ -159,22 +160,40 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                 if (Queues[i].Queue == (ID3D12CommandQueue*)Device) {
                         //if the device is already in the queue, just update the swapchain parameter
                         Queues[i].SwapChain = *ppSwapChain;
-                        DEBUG("Reuse Queues[%u] '%p' for new swapchain '%p'", i, Device, *ppSwapChain);
+                        DEBUG("Reuse Queues[%u] '%p' Age: %llu, for new swapchain '%p'", i, Device, Queues[i].Age, *ppSwapChain);
+                        Queues[i].Age = 0;
                         swapchain_inserted = true;
                         break;
                 } else if (Queues[i].Queue == nullptr) {
                         //otherwise fill empty queue
                         Queues[i].Queue = (ID3D12CommandQueue*)Device;
                         Queues[i].SwapChain = *ppSwapChain;
+                        Queues[i].Age = 0;
                         DEBUG("Add Device '%p' to Queues[%u] with swapchain '%p'", Device, i, *ppSwapChain);
                         swapchain_inserted = true;
                         break;
                 }
                 else {
                         DEBUG("Queues[%u] possibly unused commandqueue: '%p'", i, Queues[i].Queue);
+                        Queues[i].Age++;
                 }
         }
-        ASSERT(swapchain_inserted == true);
+
+        //ok, try removing the oldest one
+        if (!swapchain_inserted) {
+                unsigned highest = 0;
+
+                for (unsigned i = 0; i < MAX_QUEUES; ++i) {
+                        if (Queues[i].Age > Queues[highest].Age) {
+                                highest = i;
+                        }
+                }
+
+                Queues[highest].Age = 0;
+                Queues[highest].Queue = (ID3D12CommandQueue*)Device;
+                Queues[highest].SwapChain = *ppSwapChain;
+                DEBUG("Queues[%u] was overwritten", highest);
+        }
 
         enum : unsigned {
                 QueryInterface,
@@ -311,7 +330,7 @@ static void SetupModMenu() {
         // The console part of better console is now minimally coupled to the mod menu
         setup_console(&API);
         DEBUG("Console setup");
-}
+} 
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
 #ifdef _DEBUG
