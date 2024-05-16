@@ -195,6 +195,9 @@ struct hook_api_t {
 
         // hook a function in the Import Address Table of starfield
         FUNC_PTR(*HookFunctionIAT)(const char* dll_name, const char* func_name, const FUNC_PTR new_function);
+
+        // !EXPERIMENTAL API! AOB scan the exe memory and return the first match 
+        void* (*AOBScanEXE)(const char* signature);
 };
 
 // This API allows you to create a basic mod menu without linking to imgui

@@ -162,13 +162,100 @@ static FUNC_PTR HookFunctionIAT(const char* dll_name, const char* func_name, con
 	return ret;
 }
 
+
+static void* AOBScanEXE(const char* signature) {
+        constexpr uint16_t sig_end = 0xFFFF;
+        const auto siglen = strlen(signature);
+
+        //compile signature
+        uint16_t* sig = (uint16_t*)malloc((siglen + 1) * 2);
+        ASSERT(sig != NULL);
+
+        static const auto unhex = [](char upper, char lower) -> uint16_t {
+                uint16_t ret = 0xFF00;
+
+                upper = (char)::toupper(upper);
+                lower = (char)::toupper(lower);
+
+                if (upper == '?') {
+                        ret &= 0x0FFF;
+                }
+                else if ((upper >= '0') && (upper <= '9')) {
+                        ret |= (upper - '0') << 4;
+                }
+                else if ((upper >= 'A') && (upper <= 'F')) {
+                        ret |= (10 + (upper - 'A')) << 4;
+                }
+                else {
+                        ASSERT(false && "invalid character in signature");
+                }
+
+                if (lower == '?') {
+                        ret &= 0xF0FF;
+                }
+                else if ((lower >= '0') && (lower <= '9')) {
+                        ret |= (lower - '0');
+                }
+                else if ((lower >= 'A') && (lower <= 'F')) {
+                        ret |= (10 + (lower - 'A'));
+                }
+                else {
+                        ASSERT(false && "invalid character in signature");
+                }
+
+                return ret;
+                };
+
+        auto matchcount = 0;
+        for (auto i = 0; i < siglen; ) {
+                char upper = signature[i++];
+                char lower = signature[i++];
+                char test = signature[i++];
+
+                ASSERT(matchcount < siglen);
+                sig[matchcount++] = unhex(upper, lower);
+
+                if ((test != ' ') && (test != '\0')) {
+                        DEBUG("signature-bad format: %s", &signature[i - 3]);
+                        free(sig);
+                        return NULL;
+                }
+        }
+
+        sig[matchcount] = sig_end;
+
+        const auto hdr1 = (const IMAGE_DOS_HEADER*)Relocate(0);
+        const auto hdr2 = (const IMAGE_NT_HEADERS64*)Relocate(hdr1->e_lfanew);
+        const unsigned char* haystack = (const unsigned char*)Relocate(0);
+        const unsigned count = hdr2->OptionalHeader.SizeOfImage;
+
+
+        for (unsigned i = 0; i < count; ++i) {
+                auto match = 0;
+
+                while ((haystack[i] & (sig[match] >> 8)) == (sig[match] & 0xFF)) {
+                        ++i;
+                        ++match;
+                        if (sig[match] == sig_end) {
+                                free(sig);
+                                return Relocate(i - match);
+                        }
+                }
+        }
+
+        return NULL;
+}
+
+
+
 static constexpr struct hook_api_t HookAPI {
         &HookFunction,
         &HookVirtualTable,
         &Relocate,
         &SafeWriteMemory,
         &GetProcAddressFromIAT,
-        &HookFunctionIAT
+        &HookFunctionIAT,
+        &AOBScanEXE
 };
 
 extern constexpr const struct hook_api_t* GetHookAPI() {

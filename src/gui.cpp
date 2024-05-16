@@ -35,6 +35,10 @@ extern void draw_gui() {
         size_t infos_count = 0;
         auto infos = GetModInfo(&infos_count);
 
+        if (GetSettings()->FontScaleOverride == 0) {
+                GetSettingsMutable()->FontScaleOverride = 100;
+        }
+
         //todo: make the help text always visible with font size override?
         ImGui::SetWindowFontScale(1);
         if (ImGui::TabItemButton("Help", ImGuiTabItemFlags_Leading)) {

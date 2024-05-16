@@ -48,14 +48,14 @@ static void write_log(const char* const str) noexcept {
         static HANDLE debugfile = INVALID_HANDLE_VALUE;
         logging_mutex.lock();
         if (debugfile == INVALID_HANDLE_VALUE) {
-                debugfile = CreateFileW(L"debuglog.txt", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                debugfile = CreateFileW(L"BetterConsoleLog.txt", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         }
         if (debugfile != INVALID_HANDLE_VALUE) {
                 WriteFile(debugfile, str, (DWORD)strnlen(str, 4096), NULL, NULL);
                 FlushFileBuffers(debugfile);
         }
         else {
-                MessageBoxA(NULL, "Could not write to 'debuglog.txt'", "ASSERTION FAILURE", 0);
+                MessageBoxA(NULL, "Could not write to 'BetterConsoleLog.txt'", "ASSERTION FAILURE", 0);
         }
         logging_mutex.unlock();
 }
@@ -323,13 +323,14 @@ static void SetupModMenu() {
         ImGui::StyleColorsDark();
         DEBUG("ImGui one time init completed!");
 
-        // the modmenu UI is internally imlpemented using the plugin api, it gets coupled here
-        RegisterInternalPlugin(&API);
+        // the modmenu UI is internally implemented using the plugin api, it gets coupled here
         DEBUG("RegisterInternalPlugin");
+        RegisterInternalPlugin(&API);
+
 
         // The console part of better console is now minimally coupled to the mod menu
+        DEBUG("Console setup - crashing here is AOB or offset issue");
         setup_console(&API);
-        DEBUG("Console setup");
 } 
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
