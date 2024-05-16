@@ -282,7 +282,7 @@ static void SetupModMenu() {
         auto s = GetSettingsMutable();
         API.Config->Open(BetterAPIName);
         API.Config->BindInt(BIND_INT_DEFAULT(s->ConsoleHotkey));
-        API.Config->BindInt(BIND_VALUE(s->FontScaleOverride), 50, 300, NULL);
+        API.Config->BindInt(BIND_INT_DEFAULT(s->FontScaleOverride));
         API.Config->BindInt(BIND_INT_DEFAULT(s->HotkeyModifier));
         API.Config->Close();
         DEBUG("Settings Loaded");

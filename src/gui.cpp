@@ -14,9 +14,7 @@ static const struct simple_draw_t* const SimpleDraw{GetSimpleDrawAPI()};
 
 extern void draw_gui() {
         static ImGuiTabItemFlags ConsoleDefaultFlags = ImGuiTabItemFlags_SetSelected;
-        static int FontScalePercent = 100;
         static bool initpos = false;
-
 
         if (!initpos) {
                 initpos = true;
@@ -28,22 +26,10 @@ extern void draw_gui() {
                 //put the window in the middle of the screen at 50% game width and height
                 ImGui::SetNextWindowPos(ImVec2{ width / 2, height / 2 });
                 ImGui::SetNextWindowSize(ImVec2{ width, height });
-
-                //scale up the font based on 1920x1080 = 100%
-                float hf = size.y / 1080.f;
-                if (hf > 1.f) {
-                        FontScalePercent = (int)(hf * FontScalePercent);
-                }
-        }
-
-        //force font size based on fontscaleoverride parameter if set
-        if (GetSettings()->FontScaleOverride) {
-                FontScalePercent = GetSettings()->FontScaleOverride;
         }
 
         auto imgui_context = ImGui::GetCurrentContext();
         ImGui::Begin(BetterAPIName " Mod Menu");
-        ImGui::SetWindowFontScale(FontScalePercent / 100.f);
         ImGui::BeginTabBar("mod tabs");
 
         size_t infos_count = 0;
@@ -51,7 +37,7 @@ extern void draw_gui() {
 
         //todo: make the help text always visible with font size override?
         ImGui::SetWindowFontScale(1);
-        if (ImGui::TabItemButton("Help", ImGuiTabItemFlags_Trailing)) {
+        if (ImGui::TabItemButton("Help", ImGuiTabItemFlags_Leading)) {
                 ImGui::OpenPopup("HelpLinks");
         }
         if (ImGui::BeginPopup("HelpLinks")) {
@@ -85,7 +71,7 @@ extern void draw_gui() {
                 }
                 ImGui::EndPopup();
         }
-        ImGui::SetWindowFontScale(GetSettings()->FontScaleOverride / 100);
+        ImGui::SetWindowFontScale((float) GetSettings()->FontScaleOverride / 100.f);
         
 
         //TODO: the internal modmenu tab could be part of the internal plugin
