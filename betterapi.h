@@ -271,6 +271,9 @@ struct simple_draw_t {
         int (*ButtonBar)(const char* const* const labels, uint32_t label_count);
 
         void (*Tip)(const char* text);
+
+        //place multiple simpledraw elements on the same line
+        void (*SameLine)();
 };
 
 

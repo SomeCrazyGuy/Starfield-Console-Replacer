@@ -262,6 +262,10 @@ static void simple_tip(const char* desc) {
         }
 }
 
+static void simple_sameline() {
+        ImGui::SameLine();
+}
+
 
 static constexpr simple_draw_t SimpleDraw {
         simple_separator,
@@ -283,7 +287,8 @@ static constexpr simple_draw_t SimpleDraw {
         simple_draw_table,
         simple_tab_bar,
         simple_button_bar,
-        simple_tip
+        simple_tip,
+        simple_sameline
 };
 
 

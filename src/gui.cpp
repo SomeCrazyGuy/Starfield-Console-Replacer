@@ -8,6 +8,10 @@ static const struct simple_draw_t* const SimpleDraw{GetSimpleDrawAPI()};
 //linked list is too much pointer chasing
 //theory - mod menu can register its own draw callbacks...
 
+#include <Windows.h>
+#include <shellapi.h>
+
+
 extern void draw_gui() {
         static ImGuiTabItemFlags ConsoleDefaultFlags = ImGuiTabItemFlags_SetSelected;
         static int FontScalePercent = 100;
@@ -44,6 +48,45 @@ extern void draw_gui() {
 
         size_t infos_count = 0;
         auto infos = GetModInfo(&infos_count);
+
+        //todo: make the help text always visible with font size override?
+        ImGui::SetWindowFontScale(1);
+        if (ImGui::TabItemButton("Help", ImGuiTabItemFlags_Trailing)) {
+                ImGui::OpenPopup("HelpLinks");
+        }
+        if (ImGui::BeginPopup("HelpLinks")) {
+                if (ImGui::Button("NexusMods")) {
+                        ShellExecuteA(NULL, "open", "https://www.nexusmods.com/starfield/mods/3683", NULL, NULL, 1);
+                }
+                if (ImGui::Button("Reddit (not checked often)")) {
+                        ShellExecuteA(NULL, "open", "https://www.reddit.com/user/linuxversion/", NULL, NULL, 1);
+                }
+                if (ImGui::Button("Constellation by V2 (discord)")) {
+                        ShellExecuteA(NULL, "open", "https://discord.gg/v2-s-collections-1076179431195955290", NULL, NULL, 1);
+                }
+                if (ImGui::Button("Discord (not ready yet)")) {
+                        ImGui::OpenPopup("NoDiscordServer");
+                }
+                if (ImGui::BeginPopup("NoDiscordServer")) {
+                        char message[] = "Sorry, no discord server has been setup yet!\n"
+                                "I wouldn't have the time to moderate it anyway.\n"
+                                "But you can direct message me, my username is: linuxversion\n"
+                                "If you installed this mod as part of the Constellation by V2 collection,\n"
+                                "then you can report betterconsole issues on that discord server.";
+                        ImGui::Text(message);
+                        ImGui::EndPopup();
+                }
+                if (ImGui::Button("Reset Font Scale")) {
+                        GetSettingsMutable()->FontScaleOverride = 100;
+                }
+                if (ImGui::Button("Reset Hotkey to F1")) {
+                        GetSettingsMutable()->ConsoleHotkey = 112;
+                        GetSettingsMutable()->HotkeyModifier = 0;
+                }
+                ImGui::EndPopup();
+        }
+        ImGui::SetWindowFontScale(GetSettings()->FontScaleOverride / 100);
+        
 
         //TODO: the internal modmenu tab could be part of the internal plugin
         //      and thus called by the tab callback iteration routine like any other plugin
