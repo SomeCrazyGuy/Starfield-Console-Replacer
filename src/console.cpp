@@ -47,8 +47,8 @@ constexpr uint64_t OFFSET_console_run = 0x2911d84; //void ConsoleRun(NULL, char*
 
 //TODO: get the location of betterconsole and spawn the files there?
 
-#define OUTPUT_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleOutput.txt"
-#define HISTORY_FILE_PATH ".\\Data\\SFSE\\Plugins\\BetterConsoleHistory.txt"
+#define OUTPUT_FILE_PATH "BetterConsoleOutput.txt"
+#define HISTORY_FILE_PATH "BetterConsoleHistory.txt"
 
 
 enum class InputMode : uint32_t {

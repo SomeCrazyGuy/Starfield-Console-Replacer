@@ -69,4 +69,4 @@ struct ModMenuSettings {
 
 extern const ModMenuSettings* GetSettings();
 extern ModMenuSettings* GetSettingsMutable();
-
+extern char* GetPathInDllDir(char* path_max_buffer, const char* filename);

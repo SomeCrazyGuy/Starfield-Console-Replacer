@@ -8,7 +8,7 @@
 #include "simpledraw.h"
 #include "internal_plugin.h"
 
-#define SETTINGS_REGISTRY_PATH ".\\Data\\SFSE\\Plugins\\MiniModMenuRegistry.txt"
+#define SETTINGS_REGISTRY_PATH "MiniModMenuRegistry.txt"
 
 union SettingValue {
         void* as_data;
@@ -298,7 +298,8 @@ static bool TurboSettingsParser() {
         bool ret = false;
 
         //TODO: should use the 'W' variant to handle unsual paths?
-        auto hFile = CreateFileA(SETTINGS_REGISTRY_PATH, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        char path[MAX_PATH];
+        auto hFile = CreateFileA(GetPathInDllDir(path, SETTINGS_REGISTRY_PATH), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hFile == INVALID_HANDLE_VALUE) {
                 DEBUG("could not open settings file: %s", SETTINGS_REGISTRY_PATH);
                 return false; //file cannot be opened

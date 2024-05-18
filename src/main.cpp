@@ -39,6 +39,29 @@ static bool should_show_ui = false;
 #define EveryNFrames(N) []()->bool{static unsigned count=0;if(++count==(N)){count=0;}return !count;}()
 
 
+static char DLL_DIR[MAX_PATH];
+
+extern char* GetPathInDllDir(char* path_max_buffer, const char* filename) {
+
+        char* p = path_max_buffer;
+        
+        unsigned i, j;
+
+        for (i = 0; DLL_DIR[i]; ++i) {
+                *p++ = DLL_DIR[i];
+        }
+
+        for (j = 0; filename[j]; ++j) {
+                *p++ = filename[j];
+        }
+
+        *p = 0;
+
+        return path_max_buffer;
+}
+
+
+
 #ifdef MODMENU_DEBUG
 #include <mutex>
 std::mutex logging_mutex;
@@ -48,7 +71,8 @@ static void write_log(const char* const str) noexcept {
         static HANDLE debugfile = INVALID_HANDLE_VALUE;
         logging_mutex.lock();
         if (debugfile == INVALID_HANDLE_VALUE) {
-                debugfile = CreateFileW(L"BetterConsoleLog.txt", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                char path[MAX_PATH];
+                debugfile = CreateFileA(GetPathInDllDir(path, "BetterConsoleLog.txt"), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         }
         if (debugfile != INVALID_HANDLE_VALUE) {
                 WriteFile(debugfile, str, (DWORD)strnlen(str, 4096), NULL, NULL);
@@ -56,6 +80,7 @@ static void write_log(const char* const str) noexcept {
         }
         else {
                 MessageBoxA(NULL, "Could not write to 'BetterConsoleLog.txt'", "ASSERTION FAILURE", 0);
+                abort();
         }
         logging_mutex.unlock();
 }
@@ -358,11 +383,20 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse
 // could check if we are named vcruntime
 // could check if path is sfse plugin dir
 // could fallback to asi loader called us
-extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD fdwReason, LPVOID) {
+extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
         if (fdwReason == DLL_PROCESS_ATTACH) {
                 /* lock the linker/dll loader until hooks are installed, TODO: make sure this code path is fast */
                 static bool RunHooksOnlyOnce = true;
                 ASSERT(RunHooksOnlyOnce == true); //i want to know if this assert ever gets triggered
+                
+                //use the directory of the betterconsole dll as the place to put other files
+                GetModuleFileNameA(self, DLL_DIR, MAX_PATH);
+                char* n = DLL_DIR;
+                while (*n) ++n;
+                while ((n != DLL_DIR) && (*n != '\\')) --n;
+                ++n;
+                *n = 0;
+
                 SetupModMenu();
                 RunHooksOnlyOnce = false;
         }

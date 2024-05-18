@@ -45,6 +45,7 @@ extern void draw_gui() {
                 ImGui::OpenPopup("HelpLinks");
         }
         if (ImGui::BeginPopup("HelpLinks")) {
+                ImGui::SeparatorText("Get Help");
                 if (ImGui::Button("NexusMods")) {
                         ShellExecuteA(NULL, "open", "https://www.nexusmods.com/starfield/mods/3683", NULL, NULL, 1);
                 }
@@ -66,12 +67,21 @@ extern void draw_gui() {
                         ImGui::Text(message);
                         ImGui::EndPopup();
                 }
+                ImGui::SeparatorText("Common Fixes");
                 if (ImGui::Button("Reset Font Scale")) {
                         GetSettingsMutable()->FontScaleOverride = 100;
                 }
                 if (ImGui::Button("Reset Hotkey to F1")) {
                         GetSettingsMutable()->ConsoleHotkey = 112;
                         GetSettingsMutable()->HotkeyModifier = 0;
+                }
+                if (ImGui::Button("Open Log File")) {
+                        char path[260];
+                        ShellExecuteA(NULL, "open", GetPathInDllDir(path, "BetterConsoleLog.txt"), NULL, NULL, 1);
+                }
+                if (ImGui::Button("Open Config File")) {
+                        char path[260];
+                        ShellExecuteA(NULL, "open", GetPathInDllDir(path, "MiniModMenuRegistry.txt"), NULL, NULL, 1);
                 }
                 ImGui::EndPopup();
         }

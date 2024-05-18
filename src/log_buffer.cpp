@@ -16,7 +16,7 @@ struct LogBuffer {
 static std::vector<LogBuffer> Logs{};
 
 
-static LogBufferHandle LogBufferCreate(const char* name, const char* path) {
+static LogBufferHandle LogBufferCreate(const char* name, const char* logfile_name) {
 	
 	// create a dummy logfile for log 0
 	// this allows you to perform if(logbufferhandle) because a valid handle is never 0
@@ -29,8 +29,9 @@ static LogBufferHandle LogBufferCreate(const char* name, const char* path) {
 	LogBuffer log;
 	log.name = name;
 	log.logfile = NULL;
-	if (path) {
-		fopen_s(&log.logfile, path, "ab");
+	if (logfile_name) {
+		char path[260];
+		fopen_s(&log.logfile, GetPathInDllDir(path, logfile_name), "ab");
 	}
 	auto ret = Logs.size();
 	Logs.push_back(log);
@@ -97,7 +98,11 @@ static void LogBufferSave(LogBufferHandle handle, const char* filename) {
 	ASSERT(handle != 0);
 	ASSERT(handle < Logs.size());
 	FILE* f = nullptr;
-	fopen_s(&f, filename, "wb");
+	{
+		char path[260];
+		fopen_s(&f, GetPathInDllDir(path, filename), "wb");
+	}
+	
 	if (f == nullptr) return;
 
 	for (uint32_t line = 0; line < LogBufferGetLineCount(handle); ++line) {
@@ -125,7 +130,10 @@ static LogBufferHandle LogBufferRestore(const char* name, const char* filename) 
 	char max_line[4096];
 	FILE* f = nullptr;
 
-	fopen_s(&f, filename, "r+b");
+	{
+		char path[260];
+		fopen_s(&f, GetPathInDllDir(path, filename), "r+b");
+	}
 	if (f == nullptr) return LogBufferCreate(name, filename);
 
 	while(fgets(max_line, sizeof(max_line), f)) {
