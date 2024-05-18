@@ -198,6 +198,9 @@ struct hook_api_t {
 
         // !EXPERIMENTAL API! AOB scan the exe memory and return the first match 
         void* (*AOBScanEXE)(const char* signature);
+
+        // !EXPERIMENTAL API! get exe version as unsigned int or 0 on failure
+        unsigned (*GetExeVersion)();
 };
 
 // This API allows you to create a basic mod menu without linking to imgui

@@ -48,7 +48,7 @@ inline constexpr auto file_name_only(const char* const in) noexcept -> const cha
 #include "../imgui/imgui.h"
 
 
-#define BETTERCONSOLE_VERSION "1.2.19"
+#define BETTERCONSOLE_VERSION "1.2.20"
 
 
 // --------------------------------------------------------------------
@@ -64,7 +64,8 @@ constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 11, 36);
 struct ModMenuSettings {
         int HotkeyModifier = 0;
         int ConsoleHotkey = 112; //VK_F1
-        int FontScaleOverride = 0;
+        int FontScaleOverride = 100;
+        int IgnoreGameVersion = 0;
 };
 
 extern const ModMenuSettings* GetSettings();

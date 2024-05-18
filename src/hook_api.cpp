@@ -163,7 +163,7 @@ static FUNC_PTR HookFunctionIAT(const char* dll_name, const char* func_name, con
 }
 
 
-static void* AOBScanEXE(const char* signature) {
+static void* AOBScanBuffer(const unsigned char* buffer, unsigned buffer_size, const char* signature) {
         constexpr uint16_t sig_end = 0xFFFF;
         const auto siglen = strlen(signature);
 
@@ -224,16 +224,10 @@ static void* AOBScanEXE(const char* signature) {
 
         sig[matchcount] = sig_end;
 
-        const auto hdr1 = (const IMAGE_DOS_HEADER*)Relocate(0);
-        const auto hdr2 = (const IMAGE_NT_HEADERS64*)Relocate(hdr1->e_lfanew);
-        const unsigned char* haystack = (const unsigned char*)Relocate(0);
-        const unsigned count = hdr2->OptionalHeader.SizeOfImage;
-
-
-        for (unsigned i = 0; i < count; ++i) {
+        for (unsigned i = 0; i < buffer_size; ++i) {
                 auto match = 0;
 
-                while ((haystack[i] & (sig[match] >> 8)) == (sig[match] & 0xFF)) {
+                while ((buffer[i] & (sig[match] >> 8)) == (sig[match] & 0xFF)) {
                         ++i;
                         ++match;
                         if (sig[match] == sig_end) {
@@ -243,9 +237,55 @@ static void* AOBScanEXE(const char* signature) {
                 }
         }
 
+        free(sig);
         return NULL;
 }
 
+
+static void* AOBScanEXE(const char* signature) {
+        const auto hdr1 = (const IMAGE_DOS_HEADER*)Relocate(0);
+        const auto hdr2 = (const IMAGE_NT_HEADERS64*)Relocate(hdr1->e_lfanew);
+        const unsigned char* haystack = (const unsigned char*)hdr1;
+        const unsigned count = hdr2->OptionalHeader.SizeOfImage;
+        return AOBScanBuffer(haystack, count, signature);
+}
+
+
+static unsigned GetExeVersion() {
+        const auto hdr1 = (const IMAGE_DOS_HEADER*)Relocate(0);
+        const auto hdr2 = (const IMAGE_NT_HEADERS64*)Relocate(hdr1->e_lfanew);
+        const auto sections = (const IMAGE_SECTION_HEADER*)Relocate(hdr1->e_lfanew + sizeof(IMAGE_NT_HEADERS64));
+        const auto num_sections = hdr2->FileHeader.NumberOfSections;
+
+        const unsigned char* rsrc = nullptr;
+        uint32_t rsrc_size = 0;
+        for (auto i = 0; i < num_sections; ++i) {
+                if (*(const uint32_t*)sections[i].Name == *(const uint32_t*)".rsrc") {
+                        rsrc = (const unsigned char*)Relocate(sections[i].VirtualAddress);
+                        rsrc_size = sections[i].SizeOfRawData;
+                }
+        }
+
+        if (!rsrc_size) {
+                return 0;
+        }
+        
+        auto ver = (const unsigned char*)AOBScanBuffer(rsrc, rsrc_size, "50 00 72 00 6f 00 64 00 75 00 63 00 74 00 56 00 65 00 72 00 73 00 69 00 6f 00 6e 00");
+        
+        if (!ver) {
+                return 0;
+        }
+
+        ver += 30;
+
+        unsigned major;
+        unsigned minor;
+        unsigned patch;
+        unsigned revision;
+        swscanf_s((const wchar_t*)ver, L"%u.%u.%u.%u", &major, &minor, &patch, &revision);
+
+        return MAKE_VERSION(major, minor, patch);
+}       
 
 
 static constexpr struct hook_api_t HookAPI {
@@ -255,7 +295,8 @@ static constexpr struct hook_api_t HookAPI {
         &SafeWriteMemory,
         &GetProcAddressFromIAT,
         &HookFunctionIAT,
-        &AOBScanEXE
+        &AOBScanEXE,
+        &GetExeVersion
 };
 
 extern constexpr const struct hook_api_t* GetHookAPI() {
