@@ -1,7 +1,6 @@
 #include "main.h"
 
 #include "../imgui/imgui_impl_win32.h"
-#include "../imgui/imgui_impl_dx12.h"
 
 #include <dxgi1_6.h>
 #include <d3d12.h>
@@ -12,6 +11,8 @@
 #include "settings.h"
 
 #include "internal_plugin.h"
+
+#include "d3d11on12ui.h"
 
 
 extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
@@ -61,6 +62,15 @@ extern char* GetPathInDllDir(char* path_max_buffer, const char* filename) {
 }
 
 
+const char* const filename_only(const char* path) {
+        const char* p = path;
+        while (*path) {
+                if (*path == '\\') p = path;
+                ++path;
+        }
+        return ++p;
+}
+
 
 #ifdef MODMENU_DEBUG
 #include <mutex>
@@ -85,7 +95,7 @@ static void write_log(const char* const str) noexcept {
         logging_mutex.unlock();
 }
 extern void DebugImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept {
-        auto bytes = snprintf(format_buffer, buffer_size, "%s:%s:%d>", filename, func, line);
+        auto bytes = snprintf(format_buffer, buffer_size, "%s:%s:%d>", filename_only(filename), func, line);
         ASSERT(bytes > 0);
         ASSERT(bytes < buffer_size);
 
@@ -111,7 +121,7 @@ extern void AssertImpl [[noreturn]] (const char* const filename, const char* con
                 "In function '%s'\n"
                 "On line     '%d'\n"
                 "Message:    '%s'",
-                filename,
+                filename_only(filename),
                 func,
                 line,
                 text
@@ -120,6 +130,29 @@ extern void AssertImpl [[noreturn]] (const char* const filename, const char* con
         write_log(format_buffer);
         MessageBoxA(NULL, format_buffer, "BetterConsole Crashed!", 0);
         abort();
+}
+
+extern void TraceImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept {
+        static bool init = false;
+        static char tracebuff[2048];
+        const auto bytes = snprintf(tracebuff, sizeof(tracebuff), "%s:%s:%d> ", filename_only(filename), func, line);
+        ASSERT(bytes > 0 && "trace buffer too small ?");
+        va_list args;
+        va_start(args, fmt);
+        const auto bytes2 = vsnprintf(tracebuff + bytes, sizeof(tracebuff) - bytes, fmt, args);
+        ASSERT(bytes2 > 0 && "trace buffer too small ?");
+        tracebuff[bytes + bytes2] = '\r';
+        tracebuff[bytes + bytes2 + 1] = '\n';
+        tracebuff[bytes + bytes2 + 2] = '\0';
+        va_end(args);
+        if (!init) {
+                AllocConsole();
+                FILE* file = nullptr;
+                freopen_s(&file, "CONIN$", "rb", stdin);
+                freopen_s(&file, "CONOUT$", "wb", stdout);
+                freopen_s(&file, "CONOUT$", "wb", stderr);
+        }
+        fputs(tracebuff, stdout);
 }
 #endif
 
@@ -145,7 +178,7 @@ extern const ModMenuSettings* GetSettings() {
 }
 
 
-#define MAX_QUEUES 16
+#define MAX_QUEUES 4
 struct SwapChainQueue {
         ID3D12CommandQueue* Queue;
         IDXGISwapChain* SwapChain;
@@ -220,6 +253,17 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                 DEBUG("Queues[%u] was overwritten", highest);
         }
 
+        
+        auto proc = (decltype(OLD_Wndproc))GetWindowLongPtrW(hWnd, GWLP_WNDPROC);
+        if ((uint64_t)FAKE_Wndproc != (uint64_t)proc) {
+                OLD_Wndproc = proc;
+                SetWindowLongPtrW(hWnd, GWLP_WNDPROC, (LONG_PTR)FAKE_Wndproc);
+                DEBUG("Input Hook: OLD_Wndproc: %p, Current_Wndproc: %p, NEW_Wndproc: %p", OLD_Wndproc, proc, FAKE_Wndproc);
+        }
+        else {
+                DEBUG("WndProc already hooked");
+        }
+
         enum : unsigned {
                 QueryInterface,
                 AddRef,
@@ -232,17 +276,33 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                 Present,
         };
 
+        /*
         static bool once = 1;
         if (once) {
                 once = 0;
                 // needed to use a stronger hook here, the steam overlay uses vmt hooks to draw
                 // if the window is resized and this function is called again, we end up in a
                 // recursive loop with the steam overlay
+                // Also, if rivatuner is installed we will need to hook the hook after present, yay!
                 FUNC_PTR* fp = *(FUNC_PTR**)*ppSwapChain;
                 DEBUG("HookFunction: IDXGISwapChain::Present");
+                present_address = (intptr_t)fp[Present];
                 OLD_Present = (decltype(OLD_Present))API.Hook->HookFunction(fp[Present], (FUNC_PTR)FAKE_Present);
         }
-
+        */
+        
+        
+        static bool once = false;
+        if (!once) {
+                OLD_Present = (decltype(OLD_Present))API.Hook->HookVirtualTable(
+                        *ppSwapChain,
+                        Present,
+                        (FUNC_PTR)FAKE_Present
+                );
+                DEBUG("Hooked Present, OLD_Present: %p, NEW_Present: %p", OLD_Present, FAKE_Present);
+                once = true;
+        }
+        
         return ret;
 }
 
@@ -275,12 +335,23 @@ static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactor
                         CreateSwapChainForHwnd
                 };
 
-                OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookVirtualTable(
-                        *ppFactory,
-                        CreateSwapChainForHwnd,
-                        (FUNC_PTR) FAKE_CreateSwapChainForHwnd
-                );
-                DEBUG("Hooked CreateSwapChainForHwnd");
+                // Using a stronger hook here because otherwise the steam overlay will not function
+                // not sure why a vmt hook doesnt work here
+                FUNC_PTR* fp = *(FUNC_PTR**)*ppFactory;
+                DEBUG("HookFunction: CreateSwapChainForHwnd");
+                OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookFunction(fp[CreateSwapChainForHwnd], (FUNC_PTR)FAKE_CreateSwapChainForHwnd);
+
+                /*
+                bool hook = false; // for debugger
+                if (hook) {
+                        OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookVirtualTable(
+                                *ppFactory,
+                                CreateSwapChainForHwnd,
+                                (FUNC_PTR)FAKE_CreateSwapChainForHwnd
+                        );
+                        DEBUG("Hooked CreateSwapChainForHwnd");
+                }
+                */
         }
 
         return ret;
@@ -335,11 +406,13 @@ static void SetupModMenu() {
         OLD_ClipCursor = (decltype(OLD_ClipCursor)) API.Hook->HookFunctionIAT("user32.dll", "ClipCursor", (FUNC_PTR)FAKE_ClipCursor);
         DEBUG("Hook ClipCursor: %p", OLD_ClipCursor);
 
+        
         OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunctionIAT("sl.interposer.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
         if (!OLD_CreateDXGIFactory2) {
                 OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2))API.Hook->HookFunctionIAT("dxgi.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
         }
         DEBUG("Hook CreateDXGIFactory2: %p", OLD_CreateDXGIFactory2);
+        
 
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -359,10 +432,6 @@ static void SetupModMenu() {
 } 
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
-#ifdef _DEBUG
-        //while (!IsDebuggerPresent()) Sleep(100);
-#endif // _DEBUG
-
         static PluginHandle MyPluginHandle;
         static SFSEMessagingInterface* MessageInterface;
 
@@ -388,7 +457,11 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
                 /* lock the linker/dll loader until hooks are installed, TODO: make sure this code path is fast */
                 static bool RunHooksOnlyOnce = true;
                 ASSERT(RunHooksOnlyOnce == true); //i want to know if this assert ever gets triggered
-                
+
+#ifdef _DEBUG
+                while (!IsDebuggerPresent()) Sleep(100);
+#endif // _DEBUG
+
                 //use the directory of the betterconsole dll as the place to put other files
                 GetModuleFileNameA(self, DLL_DIR, MAX_PATH);
                 char* n = DLL_DIR;
@@ -403,177 +476,11 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
         return TRUE;
 }
 
-struct FrameContext {
-        ID3D12CommandAllocator* commandAllocator{ nullptr };
-        ID3D12Resource* mainRenderTargetResource{ nullptr };
-        D3D12_CPU_DESCRIPTOR_HANDLE mainRenderTargetDescriptor;
-        UINT64 fenceValue{ 0 }; //TODO: use this
-};
-
-struct RenderState {
-        ID3D12Device* device{ nullptr };
-        //IDXGISwapChain* swapchain{ nullptr };
-        ID3D12CommandQueue* commandQueue{ nullptr };
-        ID3D12DescriptorHeap* descriptorHeapBackBuffers{ nullptr };
-        ID3D12DescriptorHeap* descriptorHeapImGuiRender{ nullptr };
-        ID3D12GraphicsCommandList* commandList{ nullptr };
-        FrameContext* frameContext{ nullptr };
-        UINT bufferCount{ 0 };
-};
-
-
-static void SetupRenderState(RenderState* state, IDXGISwapChain3* Swapchain) {
-        Swapchain->GetDevice(IID_PPV_ARGS(&state->device));
-        ASSERT(state->device != NULL);
-
-        DXGI_SWAP_CHAIN_DESC sdesc;
-        Swapchain->GetDesc(&sdesc);
-
-        state->bufferCount = sdesc.BufferCount;
-
-        free(state->frameContext);
-        state->frameContext = (FrameContext*)calloc(state->bufferCount, sizeof(FrameContext));
-
-        D3D12_DESCRIPTOR_HEAP_DESC descriptorImGuiRender = {};
-        descriptorImGuiRender.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-        descriptorImGuiRender.NumDescriptors = state->bufferCount;
-        descriptorImGuiRender.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-
-        state->device->CreateDescriptorHeap(&descriptorImGuiRender, IID_PPV_ARGS(&state->descriptorHeapImGuiRender));
-
-        ID3D12CommandAllocator* allocator = nullptr;
-        state->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator));
-        ASSERT(allocator != NULL);
-        for (size_t i = 0; i < state->bufferCount; i++) {
-                state->frameContext[i].commandAllocator = allocator;
-        }
-
-        state->device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator, NULL, IID_PPV_ARGS(&state->commandList));
-
-        D3D12_DESCRIPTOR_HEAP_DESC descriptorBackBuffers{};
-        descriptorBackBuffers.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-        descriptorBackBuffers.NumDescriptors = state->bufferCount;
-        descriptorBackBuffers.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        descriptorBackBuffers.NodeMask = 1;
-
-        state->device->CreateDescriptorHeap(&descriptorBackBuffers, IID_PPV_ARGS(&state->descriptorHeapBackBuffers));
-
-        const auto rtvDescriptorSize = state->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-        D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = state->descriptorHeapBackBuffers->GetCPUDescriptorHandleForHeapStart();
-
-        for (UINT i = 0; i < state->bufferCount; i++) {
-                ID3D12Resource* pBackBuffer = nullptr;
-                state->frameContext[i].mainRenderTargetDescriptor = rtvHandle;
-                Swapchain->GetBuffer(i, IID_PPV_ARGS(&pBackBuffer));
-                state->device->CreateRenderTargetView(pBackBuffer, nullptr, rtvHandle);
-                state->frameContext[i].mainRenderTargetResource = pBackBuffer;
-                rtvHandle.ptr += rtvDescriptorSize;
-        }
-
-        ImGui_ImplDX12_Init(state->device, state->bufferCount,
-                DXGI_FORMAT_R8G8B8A8_UNORM, state->descriptorHeapImGuiRender,
-                state->descriptorHeapImGuiRender->GetCPUDescriptorHandleForHeapStart(),
-                state->descriptorHeapImGuiRender->GetGPUDescriptorHandleForHeapStart());
-
-        ImGui_ImplDX12_CreateDeviceObjects();
-}
-
-
-static void InjectImGui(IDXGISwapChain3* Swapchain) {
-        static RenderState state;
-
-        static IDXGISwapChain* last_swapchain = nullptr;
-        if (last_swapchain != Swapchain) {
-                last_swapchain = Swapchain;
-
-                DEBUG("Injecting imgui renderer into swapchain: %p", Swapchain);
-
-                //find the command queue for this state
-                ID3D12CommandQueue* tmp = nullptr;
-                for (const auto& q : Queues) {
-                        if (!state.commandQueue) {
-                                DEBUG("Queue %p, Swapchain: %p", q.Queue, q.SwapChain);
-                        }
-                        if (q.SwapChain == Swapchain) {
-                                tmp = q.Queue;
-                                break;
-                        }
-                }
-                if (tmp != state.commandQueue) {
-                        DEBUG("Selecting command queue: %p", tmp);
-                        state.commandQueue = tmp;
-                }
-                ASSERT(state.commandQueue != NULL);
-                
-                DEBUG("RenderPresent init Swapchain: %p", Swapchain);
-
-                DXGI_SWAP_CHAIN_DESC sdesc;
-                Swapchain->GetDesc(&sdesc);
-                HWND window_handle = sdesc.OutputWindow;
-
-                auto proc = (decltype(OLD_Wndproc))GetWindowLongPtrW(window_handle, GWLP_WNDPROC);
-                DEBUG("Input Hook: OLD_OLD_Wndproc: %p, NEW_OLD_Wndproc: %p, FAKE_Wndproc: %p", OLD_Wndproc, proc, FAKE_Wndproc);
-                if ((uint64_t)FAKE_Wndproc != (uint64_t)proc) {
-                        OLD_Wndproc = proc;
-                        SetWindowLongPtrW(window_handle, GWLP_WNDPROC, (LONG_PTR)FAKE_Wndproc);
-                }
-                else {
-                        DEBUG("Wndproc already hooked");
-                }
-
-                //TODO: actually release and recapture graphics system
-                state.device = nullptr;
-        }
-
-        if (should_show_ui) {
-                if (!state.device) {
-                        SetupRenderState(&state, Swapchain);
-                        return;
-                }
-
-                ImGui_ImplDX12_NewFrame();
-                ImGui_ImplWin32_NewFrame();
-                ImGui::NewFrame();
-
-                draw_gui();
-
-                ImGui::EndFrame();
-                ImGui::Render();
-
-                FrameContext& currentFrameContext = state.frameContext[Swapchain->GetCurrentBackBufferIndex()];
-                currentFrameContext.commandAllocator->Reset();
-
-                D3D12_RESOURCE_BARRIER barrier{};
-                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-                barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-                barrier.Transition.pResource = currentFrameContext.mainRenderTargetResource;
-                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-
-                state.commandList->Reset(currentFrameContext.commandAllocator, nullptr);
-                state.commandList->ResourceBarrier(1, &barrier);
-                state.commandList->OMSetRenderTargets(1, &currentFrameContext.mainRenderTargetDescriptor, FALSE, nullptr);
-                state.commandList->SetDescriptorHeaps(1, &state.descriptorHeapImGuiRender);
-
-                ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), state.commandList);
-
-                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-
-                state.commandList->ResourceBarrier(1, &barrier);
-                state.commandList->Close();
-
-                state.commandQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList* const*>(&state.commandList));
-        }
-}
-
 
 static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT PresentFlags) {
         // just when you though we were done loading down the main render thread...
         // now we have the periodic callback. these callbacks are spread out over seveal frames
         // each mod can register one callback and that callback will be called every "1 / mod count" frames
-
         size_t infos_count = 0;
         auto infos = GetModInfo(&infos_count);
 
@@ -585,7 +492,38 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 if (callback) callback();
         }
 
-        InjectImGui(This);
+
+        if (EveryNFrames(240)) {
+                DEBUG("render heartbeat, showing ui: %s", (should_show_ui)? "true" : "false");
+        }
+
+        static bool hooked = false;
+        static IDXGISwapChain3* last_swapchain = nullptr;
+
+        if (last_swapchain != This) {
+                if (hooked) {
+                        UI_Release();
+                        hooked = false;
+                }
+                last_swapchain = This;
+        }
+        
+        if (should_show_ui) {
+                if (!hooked) {
+                        void* queue = nullptr;
+                        for (auto i : Queues) {
+                                DEBUG("Searching for CommandQueue for swapchain %p: [ chain: %p, queue: %p, age: %u ]", This, i.SwapChain, i.Queue, i.Age);
+                                if (i.SwapChain == This) {
+                                        queue = i.Queue;
+                                        DEBUG("Commandqueue found!");
+                                        break;
+                                }
+                        }
+                        UI_Initialize(This, queue);
+                        hooked = true;
+                }
+                UI_Render();
+        }
 
         // one common cause of crashes is steam overlay hooking ::Present() and getting us into a stack overflow
         // keep this detection code in place to detect breaking changes to the imgui hook
@@ -594,6 +532,28 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
         ++loop_check;
         auto ret = OLD_Present(This, SyncInterval, PresentFlags);
         --loop_check;
+
+#if 0 
+        // Check if rivatuner broke the present hook and play an uno reverse card on rivatuner
+        static bool riva_check = false;
+        if (!riva_check) {
+                const auto hook = (const unsigned char*)present_address;
+                int32_t target = 0;
+                const intptr_t address = (intptr_t)hook;
+                FUNC_PTR me = (FUNC_PTR)FAKE_Present;
+                ASSERT(hook[0] == 0xE9); // JMP <32 bit address>
+                memcpy(&target, &hook[1], sizeof(target));
+                auto hook_address = (FUNC_PTR)(address + target + 5 /* size of JMP <addr> */);
+
+                // test
+                if (hook_address != me) {
+                        DEBUG("Playing UNO reverse card on rivatuner! OLD_Present: %p, hook_address: %p, me: %p", OLD_Present, hook_address, me);
+                        OLD_Present = (decltype(OLD_Present))API.Hook->HookFunction(hook_address, me);
+                }
+                riva_check = true;
+        }
+#endif
+
         return ret;
 }
 
@@ -602,7 +562,7 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         static HWND last_window_handle = nullptr;
 
         if (EveryNFrames(600)) {
-                DEBUG("Heartbeat");
+                DEBUG("input heartbeat");
         }
 
         if (hWnd && (last_window_handle != hWnd)) {

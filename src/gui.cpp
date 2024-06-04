@@ -14,22 +14,17 @@ static const struct simple_draw_t* const SimpleDraw{GetSimpleDrawAPI()};
 
 extern void draw_gui() {
         static ImGuiTabItemFlags ConsoleDefaultFlags = ImGuiTabItemFlags_SetSelected;
-        static bool initpos = false;
-
-        if (!initpos) {
-                initpos = true;
-                
-                const auto size = ImGui::GetIO().DisplaySize;
-                const float width = size.x / 2;
-                const float height = size.y / 2;
-
-                //put the window in the middle of the screen at 50% game width and height
-                ImGui::SetNextWindowPos(ImVec2{ width / 2, height / 2 });
-                ImGui::SetNextWindowSize(ImVec2{ width, height });
+        
+        static bool once = false;
+        if (!once) {
+                const auto screen = ImGui::GetIO().DisplaySize;
+                ImGui::SetNextWindowPos(ImVec2{ screen.x / 4, screen.y / 4 });
+                ImGui::SetNextWindowSize(ImVec2{ screen.x / 2 , screen.y / 2 });
+                once = true;
         }
 
         auto imgui_context = ImGui::GetCurrentContext();
-        ImGui::Begin(BetterAPIName " Mod Menu");
+        ImGui::Begin("BetterConsole");
         ImGui::BeginTabBar("mod tabs");
 
         size_t infos_count = 0;
@@ -81,7 +76,7 @@ extern void draw_gui() {
                 }
                 if (ImGui::Button("Open Config File")) {
                         char path[260];
-                        ShellExecuteA(NULL, "open", GetPathInDllDir(path, "MiniModMenuRegistry.txt"), NULL, NULL, 1);
+                        ShellExecuteA(NULL, "open", GetPathInDllDir(path, "BetterConsoleConfig.txt"), NULL, NULL, 1);
                 }
                 ImGui::EndPopup();
         }

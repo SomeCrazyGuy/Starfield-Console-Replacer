@@ -97,7 +97,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;dxgi.lib;d3d12.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
       <GenerateMapFile>true</GenerateMapFile>
@@ -130,7 +130,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;dxgi.lib;d3d12.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
       <GenerateMapFile>true</GenerateMapFile>
@@ -154,7 +154,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;dxgi.lib;d3d12.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
       <GenerateMapFile>true</GenerateMapFile>
@@ -188,7 +188,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;dxgi.lib;d3d12.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
       <GenerateMapFile>true</GenerateMapFile>
@@ -203,12 +203,14 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
+    <ClCompile Include="imgui\imgui_impl_dx11.cpp" />
     <ClCompile Include="imgui\imgui_impl_dx12.cpp" />
     <ClCompile Include="imgui\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
     <ClCompile Include="src\callback.cpp" />
     <ClCompile Include="src\console.cpp" />
+    <ClCompile Include="src\d3d11on12ui.cpp" />
     <ClCompile Include="src\fake_vcruntime140_1.cpp" />
     <ClCompile Include="src\gui.cpp" />
     <ClCompile Include="src\hook_api.cpp" />
@@ -233,6 +235,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="resource.h" />
     <ClInclude Include="src\callback.h" />
     <ClInclude Include="src\console.h" />
+    <ClInclude Include="src\d3d11on12ui.h" />
     <ClInclude Include="src\gui.h" />
     <ClInclude Include="src\hook_api.h" />
     <ClInclude Include="src\internal_plugin.h" />

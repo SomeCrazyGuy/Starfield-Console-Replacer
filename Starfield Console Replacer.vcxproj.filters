@@ -74,6 +74,12 @@
     <ClCompile Include="src\fake_vcruntime140_1.cpp">
       <Filter>vcruntime140_1 interface</Filter>
     </ClCompile>
+    <ClCompile Include="imgui\imgui_impl_dx11.cpp">
+      <Filter>imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="src\d3d11on12ui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imconfig.h">
@@ -137,6 +143,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\d3d11on12ui.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
