@@ -4,6 +4,7 @@
 #include <vector>
 #include <ctype.h>
 
+// Console print interface:
 //48 89 5c 24 ?? 48 89 6c 24 ?? 48 89 74 24 ?? 57 b8 30 10 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 49 - new sig with 1 match
 //48 89 5c 24 ?? 48 89 6c 24 ?? 48 89 74 24 ?? 57 b8 30 10 -- the 0x1030 stack size might be too unique
 /*
@@ -27,11 +28,7 @@
   return;
 */
 
-
-constexpr uint64_t OFFSET_console_vprint = 0x29177f8; //stolen from sfse, void ConsolePrintV(ConsoleMgr*, const char* fmt, va_list args)
-
-
-
+// Console run command interface:
 //48 8b c4 48 89 50 ?? 4c 89 40 ?? 4c 89 48 ?? 55 53 56 57 41 55 41 56 41 57 48 8d
 /*
 check for this in ghidra:
@@ -42,10 +39,7 @@ memset(local_c38,0,0x400);
 pcVar15 = "float fresult\nref refr\nset refr to GetSelectedRef\nset fresult to ";
 
 */
-constexpr uint64_t OFFSET_console_run = 0x2911d84; //void ConsoleRun(NULL, char* cmd)
 
-
-//TODO: get the location of betterconsole and spawn the files there?
 
 #define OUTPUT_FILE_PATH "BetterConsoleOutput.txt"
 #define HISTORY_FILE_PATH "BetterConsoleHistory.txt"
@@ -254,37 +248,20 @@ extern void setup_console(const BetterAPI* api) {
         HistoryHandle = LogBuffer->Restore("Command History", HISTORY_FILE_PATH);
 
         const auto hook_print_aob = HookAPI->AOBScanEXE("48 89 5c 24 ?? 48 89 6c 24 ?? 48 89 74 24 ?? 57 b8 30 10 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 49");
-
-        if (hook_print_aob) {
-                DEBUG("Hooking print function using AOB method");
-                OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
-                        (FUNC_PTR)hook_print_aob,
-                        (FUNC_PTR)console_print
-                );
-        }
-        else {
-                DEBUG("Hooking print function using offset method");
-                OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
-                        (FUNC_PTR)HookAPI->Relocate(OFFSET_console_vprint),
-                        (FUNC_PTR)console_print
-                );
-        }
+        ASSERT(hook_print_aob != NULL && "Could not hook console_print function (game version incompatible?)");
+        DEBUG("Hooking print function using AOB method");
+        OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
+                (FUNC_PTR)hook_print_aob,
+                (FUNC_PTR)console_print
+        );
 
         const auto hook_run_aob = HookAPI->AOBScanEXE("48 8b c4 48 89 50 ?? 4c 89 40 ?? 4c 89 48 ?? 55 53 56 57 41 55 41 56 41 57 48 8d");
-        if (hook_run_aob) {
-                DEBUG("Hooking run function using AOB method");
-                OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
-                        (FUNC_PTR)hook_run_aob,
-                        (FUNC_PTR)console_run
-                );
-        }
-        else {
-                DEBUG("Hooking run function using offset method");
-                OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
-                        (FUNC_PTR)HookAPI->Relocate(OFFSET_console_run),
-                        (FUNC_PTR)console_run
-                );
-        }
+        ASSERT(hook_run_aob != NULL && "Could not hook console_run function (game version incompatible?)");
+        DEBUG("Hooking run function using AOB method");
+        OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
+                (FUNC_PTR)hook_run_aob,
+                (FUNC_PTR)console_run
+        );
 
         IOBuffer[0] = 0;
 }

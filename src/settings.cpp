@@ -8,7 +8,7 @@
 #include "simpledraw.h"
 #include "internal_plugin.h"
 
-#define SETTINGS_REGISTRY_PATH "MiniModMenuRegistry.txt"
+#define SETTINGS_REGISTRY_PATH "BetterConsoleConfig.txt"
 
 union SettingValue {
         void* as_data;
@@ -406,7 +406,8 @@ E_FILE:
 
 extern void SaveSettingsRegistry() {
         FILE* f = NULL;
-        fopen_s(&f, SETTINGS_REGISTRY_PATH, "wb");
+        char path[MAX_PATH];
+        fopen_s(&f, GetPathInDllDir(path, SETTINGS_REGISTRY_PATH), "wb");
         if (f == NULL) return;
 
         for (const auto& s : Registry) {

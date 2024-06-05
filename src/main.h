@@ -10,28 +10,21 @@
 
 #ifdef MODMENU_DEBUG
 extern void DebugImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept;
-extern void AssertImpl [[noreturn]] (const char* const filename, const char* const func, int line, const char* const text) noexcept;
-inline constexpr auto file_name_only(const char* const in) noexcept -> const char* const {
-        auto i = in;
-        auto ret = in;
-        while (*i) {
-                if ((*i == '\\') || (*i =='/')) ret = i;
-                ++i;
-        }
-        return ++ret;
-}
-#define DEBUG(...) do { DebugImpl(file_name_only(__FILE__), __func__, __LINE__, " " __VA_ARGS__); } while(0)
-#define ASSERT(CONDITION) do { if (!(CONDITION)) { AssertImpl(file_name_only(__FILE__), __func__, __LINE__, " " #CONDITION); } } while(0)
+extern void AssertImpl(const char* const filename, const char* const func, int line, const char* const text) noexcept;
+extern void TraceImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept;
+#define DEBUG(...) do { DebugImpl(__FILE__, __func__, __LINE__, " " __VA_ARGS__); } while(0)
+#define ASSERT(CONDITION) do { if (!(CONDITION)) { AssertImpl(__FILE__, __func__, __LINE__, " " #CONDITION); } } while(0)
+#define TRACE(...) do { TraceImpl(__FILE__, __func__, __LINE__, " " __VA_ARGS__); } while(0)
 #define IMGUI_DEBUG_PARANOID
 #else
 #define DEBUG(...) do { } while(0)
 #define ASSERT(...) do { } while(0)
+#defince TRACE(...) do { } while(0)
 #endif // MODMENU_DEBUG
 
 
 #define WIN32_LEAN_AND_MEAN
 #define VC_EXTRA_LEAN
-#define STRICT
 
 
 #define BETTERAPI_ENABLE_STD
@@ -48,7 +41,7 @@ inline constexpr auto file_name_only(const char* const in) noexcept -> const cha
 #include "../imgui/imgui.h"
 
 
-#define BETTERCONSOLE_VERSION "1.2.20"
+#define BETTERCONSOLE_VERSION "1.3.0"
 
 
 // --------------------------------------------------------------------
@@ -64,8 +57,7 @@ constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 11, 36);
 struct ModMenuSettings {
         int HotkeyModifier = 0;
         int ConsoleHotkey = 112; //VK_F1
-        int FontScaleOverride = 100;
-        int IgnoreGameVersion = 0;
+        int FontScaleOverride = 0;
 };
 
 extern const ModMenuSettings* GetSettings();
