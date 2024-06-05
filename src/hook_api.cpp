@@ -1,28 +1,13 @@
 #include "main.h"
 
-#include "../minhook/MinHook.h"
+#include "minhook_bridge.h"
+
+#include <Windows.h>
 
 static FUNC_PTR HookFunction(FUNC_PTR old, FUNC_PTR new_func) {
-        ASSERT(old != NULL);
-        ASSERT(new_func != NULL);
-        DEBUG("OLD: '%p', NEW: '%p'", old, new_func);
-        static bool init = false;
-        if (!init) {
-                if (MH_Initialize() != MH_OK) {
-                        ASSERT(false && "minhook failed to initialize");
-                }
-                init = true;
-        }
-        FUNC_PTR ret = nullptr;
-        if (MH_CreateHook(old, new_func, (LPVOID*)&ret) != MH_OK) {
-                ASSERT(false && "minhook failed to hook function");
-                return NULL;
-        }
-        if (MH_EnableHook(old) != MH_OK) {
-                ASSERT(false && "minhook failed to enable hook");
-                return NULL;
-        };
-        ASSERT(ret != NULL);
+        auto ret = minhook_hook_function(old, new_func);
+        DEBUG("Hook Function: old: %p, new: %p, trampoline: %p", old, new_func, ret);
+        ASSERT(ret != NULL && "MinHook failed to hook function!");
         return ret;
 }
 
