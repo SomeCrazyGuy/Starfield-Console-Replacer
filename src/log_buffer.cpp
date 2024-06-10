@@ -154,15 +154,10 @@ static LogBufferHandle LogBufferRestore(const char* name, const char* filename) 
 
 static constexpr struct log_buffer_api_t LogBufferAPI {
 	&LogBufferCreate,
-	&LogBufferGetName,
-	&LogBufferGetSize,
 	&LogBufferGetLineCount,
 	&LogBufferGetLine,
-	&LogBufferClear,
 	&LogBufferAppend,
-	&LogBufferSave,
-	&LogBufferRestore,
-	&LogBufferCloseFile
+	&LogBufferRestore
 };
 
 

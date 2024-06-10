@@ -18,18 +18,15 @@ static inline void VolatileWrite(void* const dest, const void* const src) noexce
         ASSERT(src != NULL);
         ASSERT((sizeof(T) <= 8) && "x86_64 limits atomic operations to 1, 2, 4, or 8 bytes");
         const auto is_write_unaligned = ((uintptr_t)dest) & (sizeof(T) - 1);
-        if (is_write_unaligned) {
-                DEBUG("ERROR: write %u bytes to address %p is not atomic", sizeof(T), dest);
-                ASSERT(false && "Unaligned write to atomic memory is not atomic!!!");
-        }
+        ASSERT(is_write_unaligned == false && "Unaligned write to atomic memory is not atomic!!!");
         volatile T* const Dest = (volatile T* const)dest;
-        T Src;
+        T Src{};
         memcpy(&Src, src, sizeof(Src));
         *Dest = Src;
 }
 
 
-static boolean SafeWriteMemory(void* const dest, const void* const src, const unsigned length) {
+static bool SafeWriteMemory(void* const dest, const void* const src, const unsigned length) {
         ASSERT(dest != NULL);
         ASSERT(src != NULL);
         ASSERT(length > 0);
@@ -58,8 +55,6 @@ static boolean SafeWriteMemory(void* const dest, const void* const src, const un
                 memcpy(dest, src, length);
                 break;
         }
-        //lol at compiler warning coverting between BOOL and boolean, 2 interfaces unnecessary because bool exists
-        //now i feel like im programming in javascript with the dumb "!!" trick but i brought this on myself
         return !!VirtualProtect(dest, length, oldprot, &unusedprot);
 }
 
@@ -231,7 +226,43 @@ static void* AOBScanEXE(const char* signature) {
         return NULL;
 }
 
+/*
+static FUNC_PTR SearchEAT(const void* module_base, const char* export_name) {
+        ASSERT(module_base != NULL);
 
+        //TODO assert module_base is really mapped memory with virtualquery
+        const auto exe = (const unsigned char*)module_base;
+        const auto hdr = (const IMAGE_DOS_HEADER*)exe;
+        const auto nt = (const IMAGE_NT_HEADERS64*)(exe + hdr->e_lfanew);
+        const auto exports = (const IMAGE_EXPORT_DIRECTORY*)(exe + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+        const auto count = (exports->NumberOfFunctions > exports->NumberOfNames) ? exports->NumberOfNames : exports->NumberOfFunctions;
+        const auto functions = (const uint32_t*)(exe + exports->AddressOfFunctions);
+        const auto names = (const uint32_t*)(exe + exports->AddressOfNames);
+
+        for (DWORD i = 0; i < count; ++i) {
+                const auto func_name = (const char*)(exe + names[i]);
+                DEBUG("'%s' == '%s'?", export_name, func_name);
+                if (_stricmp(export_name, func_name) == 0) {
+                        return (FUNC_PTR)(exe + functions[i]);
+                }
+        }
+
+        return nullptr;
+}
+*/
+
+/*
+static FUNC_PTR GetModuleEntrypoint(const void* module_base) {
+        ASSERT(module_base != NULL);
+
+        //TODO assert module_base is really mapped memory with virtualquery
+        const auto exe = (const unsigned char*)module_base;
+        const auto hdr = (const IMAGE_DOS_HEADER*)exe;
+        const auto nt = (const IMAGE_NT_HEADERS64*)(exe + hdr->e_lfanew);
+
+        return (FUNC_PTR)(exe + nt->OptionalHeader.AddressOfEntryPoint);
+}
+*/
 
 static constexpr struct hook_api_t HookAPI {
         &HookFunction,
@@ -240,7 +271,7 @@ static constexpr struct hook_api_t HookAPI {
         &SafeWriteMemory,
         &GetProcAddressFromIAT,
         &HookFunctionIAT,
-        &AOBScanEXE
+        &AOBScanEXE,
 };
 
 extern constexpr const struct hook_api_t* GetHookAPI() {
