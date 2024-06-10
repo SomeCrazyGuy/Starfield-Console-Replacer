@@ -97,7 +97,12 @@ static void console_print(void* consolemgr, const char* fmt, va_list args) {
 
 static void console_run(void* consolemgr, char* cmd) {
         LogBuffer->Append(HistoryHandle, cmd);
-        OLD_ConsoleRun(consolemgr, cmd);
+        if (OLD_ConsoleRun) {
+                OLD_ConsoleRun(consolemgr, cmd);
+        }
+        else {
+                DEBUG("console hook not ready when running command: %s", cmd);
+        }
 }
 
 static void draw_console_window(void* imgui_context) {
@@ -232,14 +237,12 @@ extern void setup_console(const BetterAPI* api) {
         API = api;
         LogBuffer = api->LogBuffer;
 
-        ModInfo callbacks{};
-        callbacks.Name = "BetterConsole";
-        callbacks.DrawTab = &draw_console_window;
-        
         //TODO: twitch integration is broken now
         //callbacks.DrawSettings = &DrawHotkeyTab;
         
-        API->Callback->RegisterModInfo(callbacks);
+        const auto CB = API->Callback;
+        const auto handle = CB->RegisterMod("BetterConsole");
+        CB->RegisterDrawCallback(handle, draw_console_window);
 
         HookAPI = API->Hook;
         SimpleDraw = API->SimpleDraw;
@@ -264,4 +267,15 @@ extern void setup_console(const BetterAPI* api) {
         );
 
         IOBuffer[0] = 0;
+}
+
+
+extern const struct console_api_t* GetConsoleAPI() {
+        static const struct console_api_t Console {
+                [](char* command) noexcept -> void {
+                        console_run(NULL, command);
+                }
+        };
+
+        return &Console;
 }

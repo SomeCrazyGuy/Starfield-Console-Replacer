@@ -9,14 +9,14 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
-    <Filter Include="imgui">
-      <UniqueIdentifier>{a22a8b13-58f7-4068-9b84-a3da6971fbcd}</UniqueIdentifier>
-    </Filter>
     <Filter Include="minhook">
       <UniqueIdentifier>{1a26062c-e9a1-46c1-a416-095168db3265}</UniqueIdentifier>
     </Filter>
     <Filter Include="vcruntime140_1 interface">
       <UniqueIdentifier>{1f4e5c3d-97b1-49d7-bc4f-bcf2be8f8854}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui">
+      <UniqueIdentifier>{a22a8b13-58f7-4068-9b84-a3da6971fbcd}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -59,13 +59,7 @@
     <ClCompile Include="src\gui.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\internal_plugin.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\settings.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\util.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\fake_vcruntime140_1.cpp">
@@ -78,6 +72,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\minhook_bridge.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\broadcast_api.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\std_api.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hotkeys.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -130,13 +133,7 @@
     <ClInclude Include="src\gui.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\internal_plugin.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\settings.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
@@ -146,6 +143,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\minhook_bridge.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\broadcast_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\std_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hotkeys.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

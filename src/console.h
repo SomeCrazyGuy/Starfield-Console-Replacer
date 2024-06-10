@@ -5,3 +5,5 @@
 // New strategy, the mod menu and console replacer are separating
 // need to have only the most minimal binding between the two
 extern void setup_console(const BetterAPI* api);
+
+extern const struct console_api_t* GetConsoleAPI();

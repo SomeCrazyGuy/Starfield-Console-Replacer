@@ -154,7 +154,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>$(MSBuildProjectDirectory)\minhook\libMinHook.x64.lib;d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
       <GenerateMapFile>true</GenerateMapFile>
@@ -207,19 +207,20 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile Include="imgui\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
+    <ClCompile Include="src\broadcast_api.cpp" />
     <ClCompile Include="src\callback.cpp" />
     <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\d3d11on12ui.cpp" />
     <ClCompile Include="src\fake_vcruntime140_1.cpp" />
     <ClCompile Include="src\gui.cpp" />
     <ClCompile Include="src\hook_api.cpp" />
-    <ClCompile Include="src\internal_plugin.cpp" />
+    <ClCompile Include="src\hotkeys.cpp" />
     <ClCompile Include="src\log_buffer.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\minhook_bridge.c" />
     <ClCompile Include="src\settings.cpp" />
     <ClCompile Include="src\simpledraw.cpp" />
-    <ClCompile Include="src\util.cpp" />
+    <ClCompile Include="src\std_api.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="betterapi.h" />
@@ -232,18 +233,19 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="imgui\imstb_truetype.h" />
     <ClInclude Include="minhook\MinHook.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="src\broadcast_api.h" />
     <ClInclude Include="src\callback.h" />
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\d3d11on12ui.h" />
     <ClInclude Include="src\gui.h" />
     <ClInclude Include="src\hook_api.h" />
-    <ClInclude Include="src\internal_plugin.h" />
+    <ClInclude Include="src\hotkeys.h" />
     <ClInclude Include="src\log_buffer.h" />
     <ClInclude Include="src\main.h" />
     <ClInclude Include="src\minhook_bridge.h" />
     <ClInclude Include="src\settings.h" />
     <ClInclude Include="src\simpledraw.h" />
-    <ClInclude Include="src\util.h" />
+    <ClInclude Include="src\std_api.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="VersionInfo.rc" />

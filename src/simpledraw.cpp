@@ -15,17 +15,17 @@ static void simple_text(const char* fmt, ...) {
 }
 
 
-static boolean simple_button(const char* text) {
+static bool simple_button(const char* text) {
         return ImGui::Button(text);
 }
 
 
-static boolean simple_checkbox(const char* text, boolean* value) {
+static bool simple_checkbox(const char* text, bool* value) {
         return ImGui::Checkbox(text, (bool*)value);
 }
 
 
-static boolean simple_input_text(const char* name, char* buffer, uint32_t buffer_size, boolean true_on_enter) {
+static bool simple_input_text(const char* name, char* buffer, uint32_t buffer_size, bool true_on_enter) {
         return ImGui::InputText(name, buffer, buffer_size, (true_on_enter) ? ImGuiInputTextFlags_EnterReturnsTrue : 0);
 }
 
@@ -84,18 +84,18 @@ static void simple_vbox_end() {
 }
 
 
-static boolean simple_drag_int(const char* name, int* value, int min, int max) {
+static bool simple_drag_int(const char* name, int* value, int min, int max) {
         return ImGui::DragInt(name, value, 1.f, min, max);
 }
 
 
-static boolean simple_drag_float(const char* name, float* value, float min, float max) {
+static bool simple_drag_float(const char* name, float* value, float min, float max) {
         return ImGui::DragFloat(name, value, 1.f, min, max);
 }
 
 
 // "simple" draw api
-static void simple_show_filtered_log_buffer(LogBufferHandle handle, const uint32_t* lines, uint32_t line_count, boolean scroll_to_bottom) {
+static void simple_show_filtered_log_buffer(LogBufferHandle handle, const uint32_t* lines, uint32_t line_count, bool scroll_to_bottom) {
         if (!handle) return; //resist invalid logbuffers
         static const auto LogAPI = GetLogBufferAPI();
         char temp_line[4096];
@@ -130,24 +130,24 @@ static void simple_show_filtered_log_buffer(LogBufferHandle handle, const uint32
 }
 
 
-static void simple_render_log_buffer(LogBufferHandle handle, boolean scrolltobottom) {
+static void simple_render_log_buffer(LogBufferHandle handle, bool scrolltobottom) {
         simple_show_filtered_log_buffer(handle, NULL, 0, scrolltobottom);
 }
 
 
-static boolean simple_selection_list(const UIDataList* dl, int* selection) {
-        const int sel = *selection;
+static bool simple_selection_list(uint32_t* selection, const void* userdata, uint32_t count, CALLBACK_SELECTIONLIST to_string) {
+        const uint32_t sel = *selection;
         
-        boolean ret = false;
+        bool ret = false;
         ImGuiListClipper clip;
         char str[128];
 
         //TODO: because entries that return null are skipped, need to write code to keep iterating until we render enough options
-        clip.Begin(dl->Count);
+        clip.Begin(count);
         while (clip.Step()) {
                 for (int i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
                         ImGui::PushID(i);
-                        const char* text = dl->ToString(dl->UserData, i, str, sizeof(str));
+                        const char* text = to_string(userdata, i, str, sizeof(str));
                         if (text) {
                                 if (ImGui::Selectable(text, (sel == i))) {
                                         *selection = i;
@@ -161,22 +161,10 @@ static boolean simple_selection_list(const UIDataList* dl, int* selection) {
 }
 
 
-static const char* parse_special_character(const char* const label, char* special) {
-        if (!::isalnum((unsigned char)*label)) {
-                *special = *label;
-                return &label[1];
-        }
-        *special = 0;
-        return label;
-}
-
-
 static void simple_draw_table(const char * const * const headers, uint32_t header_count, void* rows_userdata, uint32_t row_count, CALLBACK_TABLE_DRAWCELL draw_cell) {
         if (ImGui::BeginTable("SimpleDrawTable", header_count, ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable)) {
                 for (uint32_t i = 0; i < header_count; ++i) {
-                        char expand;
-                        const char* label = parse_special_character(headers[i], &expand);
-                        ImGui::TableSetupColumn(label, (expand == '*') ? ImGuiTableColumnFlags_WidthStretch : ImGuiTableColumnFlags_WidthFixed);
+                        ImGui::TableSetupColumn(headers[i]);
                 }
                 ImGui::TableHeadersRow();
 

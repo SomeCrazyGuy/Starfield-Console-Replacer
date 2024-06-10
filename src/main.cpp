@@ -8,9 +8,9 @@
 
 #include "gui.h"
 #include "console.h"
-#include "settings.h"
-
-#include "internal_plugin.h"
+#include "broadcast_api.h"
+#include "std_api.h"
+#include "hotkeys.h"
 
 #include "d3d11on12ui.h"
 
@@ -18,7 +18,7 @@
 extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
         1, // SFSE api version
         1, // Plugin version
-        BetterAPIName,
+        "BetterConsole",
         "Linuxversion",
         1, // AddressIndependence::Signatures
         1, // StructureIndependence::NoStructs
@@ -27,6 +27,8 @@ extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
         0, 0 //reserved fields
 };
 
+static void OnHotheyActivate(uintptr_t);
+static void SetupModMenu();
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT PresentFlags);
@@ -35,14 +37,18 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 static decltype(FAKE_Present)* OLD_Present = nullptr;
 static decltype(FAKE_Wndproc)* OLD_Wndproc = nullptr;
 
+
+static HINSTANCE self_module_handle = nullptr;
 static bool should_show_ui = false;
+static bool betterapi_load_selftest = false;
 
 #define EveryNFrames(N) []()->bool{static unsigned count=0;if(++count==(N)){count=0;}return !count;}()
 
 
-static char DLL_DIR[MAX_PATH];
+static char DLL_DIR[MAX_PATH]{};
 
 extern char* GetPathInDllDir(char* path_max_buffer, const char* filename) {
+        ASSERT(DLL_DIR[0] != '\0' && "a file was opened before dll dir was setup");
 
         char* p = path_max_buffer;
         
@@ -163,12 +169,19 @@ static const BetterAPI API {
         GetLogBufferAPI(),
         GetSimpleDrawAPI(),
         GetCallbackAPI(),
-        GetConfigAPI()
+        GetConfigAPI(),
+        GetStdAPI(),
+        GetConsoleAPI()
 };
 
 
+extern "C" __declspec(dllexport) const BetterAPI * GetBetterAPI() {
+        return &API;
+}
+
+
 extern ModMenuSettings* GetSettingsMutable() {
-        static ModMenuSettings Settings;
+        static ModMenuSettings Settings{};
         return &Settings;
 }
 
@@ -275,21 +288,6 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                 GetDevice,
                 Present,
         };
-
-        /*
-        static bool once = 1;
-        if (once) {
-                once = 0;
-                // needed to use a stronger hook here, the steam overlay uses vmt hooks to draw
-                // if the window is resized and this function is called again, we end up in a
-                // recursive loop with the steam overlay
-                // Also, if rivatuner is installed we will need to hook the hook after present, yay!
-                FUNC_PTR* fp = *(FUNC_PTR**)*ppSwapChain;
-                DEBUG("HookFunction: IDXGISwapChain::Present");
-                present_address = (intptr_t)fp[Present];
-                OLD_Present = (decltype(OLD_Present))API.Hook->HookFunction(fp[Present], (FUNC_PTR)FAKE_Present);
-        }
-        */
         
         
         static bool once = false;
@@ -310,11 +308,13 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
 static HRESULT(*OLD_CreateDXGIFactory2)(UINT, REFIID, void**) = nullptr;
 static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactory) {
         auto ret = OLD_CreateDXGIFactory2(Flags, RefID, ppFactory);
-        DEBUG("Factory: %p", *ppFactory);
 
         static bool once = 1;
         if (once) {
                 once = 0;
+
+                // now that we are out of dllmain, complete the initialization of betterconsole
+                SetupModMenu();
 
                 enum {
                         QueryInterface,
@@ -336,53 +336,39 @@ static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactor
                 };
 
                 // Using a stronger hook here because otherwise the steam overlay will not function
-                // not sure why a vmt hook doesnt work here
+                // not sure why a vmt hook doesnt work here, steam checks and rejects?
                 FUNC_PTR* fp = *(FUNC_PTR**)*ppFactory;
                 DEBUG("HookFunction: CreateSwapChainForHwnd");
                 OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookFunction(fp[CreateSwapChainForHwnd], (FUNC_PTR)FAKE_CreateSwapChainForHwnd);
-
-                /*
-                bool hook = false; // for debugger
-                if (hook) {
-                        OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookVirtualTable(
-                                *ppFactory,
-                                CreateSwapChainForHwnd,
-                                (FUNC_PTR)FAKE_CreateSwapChainForHwnd
-                        );
-                        DEBUG("Hooked CreateSwapChainForHwnd");
-                }
-                */
         }
 
         return ret;
 }
 
-// quick hack for structname.membername or struct->member passed to BIND_INT
-inline constexpr const char* member_name_only(const char* in) {
-        while (*in) ++in;
-        --in;
-        while (
-                ((*in >= 'a') && (*in <= 'z')) ||
-                ((*in >= '0') && (*in <= '9')) ||
-                ((*in >= 'A') && (*in <= 'Z'))
-                ) --in;
-        ++in;
-        return in;
+
+static void Callback_Config(ConfigAction action) {
+        auto c = GetConfigAPI();
+        auto s = GetSettingsMutable();
+        ConfigSetMod("(internal)");
+        c->ConfigU32(action, "FontScaleOverride", &s->FontScaleOverride);
+        if (action == ConfigAction_Write) {
+                HotkeySaveSettings();
+        }
 }
 
-#define BIND_INT_DEFAULT(INT_PTR) member_name_only(#INT_PTR), &INT_PTR, 0, 0, NULL
-#define BIND_VALUE(VALUE) member_name_only(#VALUE), &VALUE
 
 static void SetupModMenu() {
-        DEBUG(BetterAPIName " Version: " BETTERCONSOLE_VERSION);
-        auto s = GetSettingsMutable();
-        API.Config->Open(BetterAPIName);
-        API.Config->BindInt(BIND_INT_DEFAULT(s->ConsoleHotkey));
-        API.Config->BindInt(BIND_INT_DEFAULT(s->FontScaleOverride));
-        API.Config->BindInt(BIND_INT_DEFAULT(s->HotkeyModifier));
-        API.Config->Close();
-        DEBUG("Settings Loaded");
+        // use the directory of the betterconsole dll as the place to put other files
+        // NOTE: this needs to be dome before any other file (logfile/config/conaole history) is opened
+        GetModuleFileNameA(self_module_handle, DLL_DIR, MAX_PATH);
+        char* n = DLL_DIR;
+        while (*n) ++n;
+        while ((n != DLL_DIR) && (*n != '\\')) --n;
+        ++n;
+        *n = 0;
 
+        DEBUG("Initializing BetterConsole...");
+        DEBUG("BetterConsole Version: " BETTERCONSOLE_VERSION);
         static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = nullptr;
         static decltype(OLD_GetRawInputData) FAKE_GetRawInputData = [](HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) -> UINT {
                 auto ret = OLD_GetRawInputData(hri, cmd, data, data_size, hsize);
@@ -406,14 +392,6 @@ static void SetupModMenu() {
         OLD_ClipCursor = (decltype(OLD_ClipCursor)) API.Hook->HookFunctionIAT("user32.dll", "ClipCursor", (FUNC_PTR)FAKE_ClipCursor);
         DEBUG("Hook ClipCursor: %p", OLD_ClipCursor);
 
-        
-        OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2)) API.Hook->HookFunctionIAT("sl.interposer.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
-        if (!OLD_CreateDXGIFactory2) {
-                OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2))API.Hook->HookFunctionIAT("dxgi.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
-        }
-        DEBUG("Hook CreateDXGIFactory2: %p", OLD_CreateDXGIFactory2);
-        
-
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         auto& io = ImGui::GetIO();
@@ -421,37 +399,32 @@ static void SetupModMenu() {
         ImGui::StyleColorsDark();
         DEBUG("ImGui one time init completed!");
 
-        // the modmenu UI is internally implemented using the plugin api, it gets coupled here
-        DEBUG("RegisterInternalPlugin");
-        RegisterInternalPlugin(&API);
-
-
         // The console part of better console is now minimally coupled to the mod menu
-        DEBUG("Console setup - crashing here is AOB or offset issue");
+        DEBUG("Console setup - crashing here is AOB issue");
         setup_console(&API);
-} 
 
-extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface * sfse) {
-        static PluginHandle MyPluginHandle;
-        static SFSEMessagingInterface* MessageInterface;
+        // Gather all my friends!
+        BroadcastBetterAPIMessage(&API);
+        ASSERT(betterapi_load_selftest == true);
 
-        //broadcast to all listeners of "BetterConsole" during sfse postpostload
-        static auto CALLBACK_sfse = [](SFSEMessage* msg) -> void {
-                if (msg->type == MessageType_SFSE_PostPostLoad) {
-                        MessageInterface->Dispatch(MyPluginHandle, BetterAPIMessageType, (void*)&API, sizeof(API), NULL);
-                        DEBUG("SFSE PostPostLoad callback message dispatched");
-                }
-        };
-
-        MyPluginHandle = sfse->GetPluginHandle();
-        MessageInterface = (SFSEMessagingInterface*)sfse->QueryInterface(InterfaceID_Messaging);
-        MessageInterface->RegisterListener(MyPluginHandle, "SFSE", CALLBACK_sfse);
+        // Load any settings from the config file and call any config callbacks
+        LoadSettingsRegistry();
 }
 
-// we need to figure out what type of loader was used here
-// could check if we are named vcruntime
-// could check if path is sfse plugin dir
-// could fallback to asi loader called us
+extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface*) {}
+
+extern "C" __declspec(dllexport) void BetterConsoleReceiver(const struct better_api_t* api) {
+        const auto handle = api->Callback->RegisterMod("(internal)");
+        api->Callback->RegisterConfigCallback(handle, Callback_Config);
+        api->Callback->RegisterHotkeyCallback(handle, OnHotheyActivate);
+        
+        //force hotkey for betterconsole default action using internal api
+        HotkeyRequestNewHotkey(handle, "BetterConsole", 0, VK_F1);
+        
+        betterapi_load_selftest = true;
+        DEBUG("Self Test Complete");
+}
+
 extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
         if (fdwReason == DLL_PROCESS_ATTACH) {
                 /* lock the linker/dll loader until hooks are installed, TODO: make sure this code path is fast */
@@ -459,18 +432,18 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
                 ASSERT(RunHooksOnlyOnce == true); //i want to know if this assert ever gets triggered
 
 #ifdef _DEBUG
-                while (!IsDebuggerPresent()) Sleep(100);
+                //while (!IsDebuggerPresent()) Sleep(100);
 #endif // _DEBUG
 
-                //use the directory of the betterconsole dll as the place to put other files
-                GetModuleFileNameA(self, DLL_DIR, MAX_PATH);
-                char* n = DLL_DIR;
-                while (*n) ++n;
-                while ((n != DLL_DIR) && (*n != '\\')) --n;
-                ++n;
-                *n = 0;
+                self_module_handle = self;
 
-                SetupModMenu();
+                // just hook this one function the game needs to display graphics, then lazy hook the rest when it's called later
+                OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2))API.Hook->HookFunctionIAT("sl.interposer.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
+                if (!OLD_CreateDXGIFactory2) {
+                        OLD_CreateDXGIFactory2 = (decltype(OLD_CreateDXGIFactory2))API.Hook->HookFunctionIAT("dxgi.dll", "CreateDXGIFactory2", (FUNC_PTR)FAKE_CreateDXGIFactory2);
+                }
+                ASSERT(OLD_CreateDXGIFactory2 != NULL);
+
                 RunHooksOnlyOnce = false;
         }
         return TRUE;
@@ -478,81 +451,45 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
 
 
 static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT PresentFlags) {
-        // just when you though we were done loading down the main render thread...
-        // now we have the periodic callback. these callbacks are spread out over seveal frames
-        // each mod can register one callback and that callback will be called every "1 / mod count" frames
-        size_t infos_count = 0;
-        auto infos = GetModInfo(&infos_count);
-
-        static uint32_t periodic_id = 0;
-        if (infos_count) {
-                ASSERT(infos != NULL);
-                uint32_t this_frame_callback = periodic_id++ % infos_count;
-                auto callback = infos[this_frame_callback].PeriodicCallback;
-                if (callback) callback();
-        }
-
-
         if (EveryNFrames(240)) {
                 DEBUG("render heartbeat, showing ui: %s", (should_show_ui)? "true" : "false");
         }
 
         static bool hooked = false;
         static IDXGISwapChain3* last_swapchain = nullptr;
+        static ID3D12CommandQueue* comand_queue = nullptr;
 
         if (last_swapchain != This) {
-                if (hooked) {
-                        UI_Release();
-                        hooked = false;
-                }
                 last_swapchain = This;
+                
+                for (auto i : Queues) {
+                        DEBUG("Searching for CommandQueue for swapchain %p: [ chain: %p, queue: %p, age: %u ]", This, i.SwapChain, i.Queue, i.Age);
+                        if (i.SwapChain == This) {
+                                comand_queue = i.Queue;
+                                DEBUG("Commandqueue found!");
+                                break;
+                        }
+                }
         }
         
         if (should_show_ui) {
                 if (!hooked) {
-                        void* queue = nullptr;
-                        for (auto i : Queues) {
-                                DEBUG("Searching for CommandQueue for swapchain %p: [ chain: %p, queue: %p, age: %u ]", This, i.SwapChain, i.Queue, i.Age);
-                                if (i.SwapChain == This) {
-                                        queue = i.Queue;
-                                        DEBUG("Commandqueue found!");
-                                        break;
-                                }
-                        }
-                        UI_Initialize(This, queue);
+                        UI_Initialize(This, comand_queue);
                         hooked = true;
                 }
                 UI_Render();
         }
+        else {
+                UI_Release();
+                hooked = false;
+        }
 
-        // one common cause of crashes is steam overlay hooking ::Present() and getting us into a stack overflow
-        // keep this detection code in place to detect breaking changes to the imgui hook
+        // keep this detection code in place to detect breaking changes to the hook causing recursive nightmare
         static unsigned loop_check = 0;
         ASSERT((loop_check == 0) && "recursive hook detected");
         ++loop_check;
         auto ret = OLD_Present(This, SyncInterval, PresentFlags);
         --loop_check;
-
-#if 0 
-        // Check if rivatuner broke the present hook and play an uno reverse card on rivatuner
-        static bool riva_check = false;
-        if (!riva_check) {
-                const auto hook = (const unsigned char*)present_address;
-                int32_t target = 0;
-                const intptr_t address = (intptr_t)hook;
-                FUNC_PTR me = (FUNC_PTR)FAKE_Present;
-                ASSERT(hook[0] == 0xE9); // JMP <32 bit address>
-                memcpy(&target, &hook[1], sizeof(target));
-                auto hook_address = (FUNC_PTR)(address + target + 5 /* size of JMP <addr> */);
-
-                // test
-                if (hook_address != me) {
-                        DEBUG("Playing UNO reverse card on rivatuner! OLD_Present: %p, hook_address: %p, me: %p", OLD_Present, hook_address, me);
-                        OLD_Present = (decltype(OLD_Present))API.Hook->HookFunction(hook_address, me);
-                }
-                riva_check = true;
-        }
-#endif
 
         return ret;
 }
@@ -565,7 +502,7 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 DEBUG("input heartbeat");
         }
 
-        if (hWnd && (last_window_handle != hWnd)) {
+        if (last_window_handle != hWnd) {
                 DEBUG("Window handle changed: %p -> %p", last_window_handle, hWnd);
                 last_window_handle = hWnd;
 
@@ -577,27 +514,28 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 ImGui_ImplWin32_Init(hWnd);
         }
 
-        if (uMsg == WM_KEYDOWN) {
-                // built-in hotkey takes priority
-                if (wParam == GetSettings()->ConsoleHotkey) {
-                        const auto modifier = GetSettings()->HotkeyModifier;
-                        if ((modifier == 0) || (GetKeyState(modifier) < 0)) {
-                                should_show_ui = !should_show_ui;
-                                DEBUG("ui toggled");
-                                //when you open or close the UI, settings are saved
-                                SaveSettingsRegistry();
-                        }
-                }
+        static bool shift = false;
+        static bool ctrl = false;
+        static bool alt = false;
 
-                boolean shift = (GetKeyState(VK_SHIFT) < 0);
-                boolean ctrl = (GetKeyState(VK_CONTROL) < 0);
-          
-                size_t infos_count = 0;
-                auto infos = GetModInfo(&infos_count);
-                for (auto i = 0; i < infos_count; ++i) {
-                        if (infos[i].HotkeyCallback) {
-                                if (infos[i].HotkeyCallback((uint32_t)wParam, shift, ctrl)) break;
-                        }
+        if (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) {
+                if (wParam == VK_SHIFT || wParam == VK_LSHIFT || wParam == VK_RSHIFT) {
+                        shift = true;
+                } else if (wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL) {
+                        ctrl = true;
+                } else if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
+                        alt = true;
+                } else {
+                        unsigned vk_key = wParam & 0xFF;
+                        HotkeyReceiveKeypress(vk_key, ctrl, alt, shift);
+                }
+        } else if (uMsg == WM_KEYUP || uMsg == WM_SYSKEYUP) {
+                if (wParam == VK_SHIFT || wParam == VK_LSHIFT || wParam == VK_RSHIFT) {
+                        shift = false;
+                } else if (wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL) {
+                        ctrl = false;
+                } else if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
+                        alt = false;
                 }
         }
 
@@ -607,4 +545,14 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
 
         return CallWindowProcW(OLD_Wndproc, hWnd, uMsg, wParam, lParam);
+}
+
+static void OnHotheyActivate(uintptr_t) {
+        should_show_ui = !should_show_ui;
+        DEBUG("ui toggled");
+
+        if (!should_show_ui) {
+                //when you close the UI, settings are saved
+                SaveSettingsRegistry();
+        }
 }
