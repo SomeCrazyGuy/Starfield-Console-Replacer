@@ -82,11 +82,16 @@ extern CallbackFunction CallbackGetCallback(CallbackType type, RegistrationHandl
 }
 
 
-static RegistrationHandle RegisterMod(const char* mod_name) {
+static RegistrationHandle RegisterMod(const char* mod_name, uint32_t betterapi_version) {
         ASSERT(mod_name != NULL);
         ASSERT(*mod_name && "mod_name cannot be empty");
         ASSERT(strlen(mod_name) < 32 && "mod_name too long >= 32 characters");
         ASSERT(strlen(mod_name) >= 3 && "mod_name too short < 3 characters");
+        if (betterapi_version != BETTERAPI_VERSION) {
+                DEBUG("BetterAPI version mismatch. Expected %d, got %d", BETTERAPI_VERSION, betterapi_version);
+                DEBUG("The faulty mod is '%s'", mod_name);
+                ASSERT(false && "BetterAPI version mismatch, check the logfile for details");
+        }
         //todo check for whitespace and other invalid characters inthe mod name
 
         const auto ret = (uint32_t) RegisteredMods.size();

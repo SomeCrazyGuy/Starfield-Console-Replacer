@@ -237,11 +237,10 @@ extern void setup_console(const BetterAPI* api) {
         API = api;
         LogBuffer = api->LogBuffer;
 
-        //TODO: twitch integration is broken now
-        //callbacks.DrawSettings = &DrawHotkeyTab;
+        //TODO: add console hotkeys tab
         
         const auto CB = API->Callback;
-        const auto handle = CB->RegisterMod("BetterConsole");
+        const auto handle = CB->RegisterMod("BetterConsole", BETTERAPI_VERSION);
         CB->RegisterDrawCallback(handle, draw_console_window);
 
         HookAPI = API->Hook;

@@ -14,6 +14,9 @@
 
 #include "d3d11on12ui.h"
 
+#define BETTERAPI_IMPLEMENTATION
+#include "../betterapi.h"
+
 
 extern "C" __declspec(dllexport) SFSEPluginVersionData SFSEPlugin_Version = {
         1, // SFSE api version
@@ -414,7 +417,8 @@ static void SetupModMenu() {
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface*) {}
 
 extern "C" __declspec(dllexport) void BetterConsoleReceiver(const struct better_api_t* api) {
-        const auto handle = api->Callback->RegisterMod("(internal)");
+        BETTERAPI_INIT(api);
+        const auto handle = api->Callback->RegisterMod("(internal)", BETTERAPI_VERSION);
         api->Callback->RegisterConfigCallback(handle, Callback_Config);
         api->Callback->RegisterHotkeyCallback(handle, OnHotheyActivate);
         
