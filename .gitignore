@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 
 Build/
+/src/old_main.cpp
