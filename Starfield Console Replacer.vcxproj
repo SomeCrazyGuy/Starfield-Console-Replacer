@@ -75,7 +75,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;shell32.lib</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
       <GenerateMapFile>true</GenerateMapFile>
@@ -85,6 +85,11 @@
       <Command>copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)vcruntime140_1.dll"
 copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Link>
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;shell32.lib</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="imgui\imgui.cpp" />
@@ -125,6 +130,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\d3d11on12ui.h" />
     <ClInclude Include="src\gui.h" />
+    <ClInclude Include="src\gui_interface.h" />
     <ClInclude Include="src\hook_api.h" />
     <ClInclude Include="src\hotkeys.h" />
     <ClInclude Include="src\log_buffer.h" />

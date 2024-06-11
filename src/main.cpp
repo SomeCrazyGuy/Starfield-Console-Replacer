@@ -352,7 +352,6 @@ static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactor
 static void Callback_Config(ConfigAction action) {
         auto c = GetConfigAPI();
         auto s = GetSettingsMutable();
-        ConfigSetMod("(internal)");
         c->ConfigU32(action, "FontScaleOverride", &s->FontScaleOverride);
         if (action == ConfigAction_Write) {
                 HotkeySaveSettings();

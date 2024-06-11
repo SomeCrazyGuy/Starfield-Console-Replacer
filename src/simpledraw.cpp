@@ -142,17 +142,14 @@ static bool simple_selection_list(uint32_t* selection, const void* userdata, uin
         ImGuiListClipper clip;
         char str[128];
 
-        //TODO: because entries that return null are skipped, need to write code to keep iterating until we render enough options
         clip.Begin(count);
         while (clip.Step()) {
                 for (int i = clip.DisplayStart; i < clip.DisplayEnd; ++i) {
                         ImGui::PushID(i);
                         const char* text = to_string(userdata, i, str, sizeof(str));
-                        if (text) {
-                                if (ImGui::Selectable(text, (sel == i))) {
-                                        *selection = i;
-                                        ret = true;
-                                }
+                        if (ImGui::Selectable((text) ? text : "NULL", (sel == i))) {
+                                *selection = i;
+                                ret = true;
                         }
                         ImGui::PopID();
                 }
