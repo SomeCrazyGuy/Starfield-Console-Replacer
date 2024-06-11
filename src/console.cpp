@@ -17,7 +17,7 @@
   uVar1 = FUN_140839080();
   FUN_140587784(0x40);
 
-  //calling vsnprintf() with 4096 buffer and using the retrn value to append "\n\0"
+  //calling vsnprintf() with 4096 buffer and using the return value to append "\n\0"
   iVar2 = FUN_1412518e8(local_1010,0x1000,param_2,param_4,param_3);
   if (0 < iVar2) {
     local_1010[iVar2] = '\n';           //note the behavior of adding "\n\0"
@@ -48,7 +48,8 @@ pcVar15 = "float fresult\nref refr\nset refr to GetSelectedRef\nset fresult to "
 enum class InputMode : uint32_t {
         Command,
         SearchOutput,
-        SearchHistory
+        SearchHistory,
+        Hotkeys
 };
 
 static void console_run(void* consolemgr, char* cmd);
@@ -153,6 +154,12 @@ static void draw_console_window(void* imgui_context) {
                         }
                 }
                 SimpleDraw->ShowFilteredLogBuffer(HistoryHandle, SearchHistoryLines.data(), (uint32_t)SearchHistoryLines.size(), UpdateScroll);
+        }
+        else if (CommandMode == InputMode::Hotkeys) {
+                SimpleDraw->Text("Coming soon...");
+        }
+        else {
+                ASSERT(false && "Invalid command mode");
         }
 
         UpdateScroll = false;

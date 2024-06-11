@@ -4,11 +4,11 @@
 
 // Integrate betterconsole in your mod in 7 easy steps:
 // 
-// Step 1) #include "betterapi.h" anywhere in your project
+// Step 1) Include "betterapi.h" anywhere you want to use the api
 // 
 // 
-// Step 2) In only a single translation unit (.cpp file) define BETTERAPI_IMPLEMENTATION
-//         before including betterapi.h to prevent linker errors - like this:
+// Step 2) In only one translation unit (.cpp file) define BETTERAPI_IMPLEMENTATION
+//         before including betterapi.h to generate necessary glue code:
 // 
 //         #define BETTERAPI_IMPLEMENTATION // only do this in one file
 //         #include "betterapi.h"           // now everything will work
@@ -19,17 +19,16 @@
 //         DLLEXPORT void BetterConsoleReceiver(const struct better_api_t* betterapi);
 // 
 // 
-// Step 4) Before using the betterconsole api, call this function with the
-//         `betterapi` pointer received from your BetterConsoleReceiver:
+// Step 4) Before using the betterconsole api, you will need to check compatibility
+//         with your mod. You should call BETTERAPI_INIT() with the
+//         `betterapi` pointer received from your BetterConsoleReceiver fuction:
 // 
 //         BETTERAPI_INIT(betterapi); //this should be done first in BetterConsoleReceiver
 // 
 // 
 // Step 5) Register the name of your plugin with betterconsole using the callback api.
-//         This will also check version compatibility between the installed version
-//         of betterconsole and your mod:
 // 
-//         my_mod_handle = betterapi->Callback->RegisterMod("My Mod Name", BETTERAPI_VERSION);
+//         my_mod_handle = betterapi->Callback->RegisterMod("My Mod Name");
 // 
 // 
 // Step 6) Register additional callbacks for any functionality you want:
@@ -106,7 +105,8 @@ struct better_api_t;
 // function to initialize the betterapi system before using any of the api.
 // this allows me to do some quick hacks, extra checks, or other fixes if needed
 // without needing to update the main mod itself
-void BETTERAPI_INIT(const struct better_api_t* betterapi);
+#define BETTERAPI_INIT(betterapi) do { if (!betterapi_check_compatibility((betterapi))) return; } while(0)
+extern bool betterapi_check_compatibility(const struct better_api_t* betterapi);
 
 
 // Note: this API is not thread safe,
@@ -527,8 +527,20 @@ typedef struct better_api_t {
         const struct std_api_t* Stdlib;
         const struct console_api_t* Console;
 } BetterAPI;
-#endif // !BETTERAPI_API_H
 
+
+// in the next version of betterapi we will add a betterapi_version_t struct
+// this struct will be the first one in the betterapi struct and with how 
+// structs work you could cast the betterapi struct to a betterapi_version_t**
+// and will have a non-breaking api:
+struct betterapi_version_t {
+        // this should be the same as BETTERAPI_VERSION
+        uint64_t betterapi_version;
+
+        uintptr_t reserved[15];
+};
+
+#endif // !BETTERAPI_API_H
 
 
 
@@ -645,8 +657,24 @@ typedef struct SFSEMessagingInterface_t {
 #endif
 
 #ifdef BETTERAPI_IMPLEMENTATION
-void BETTERAPI_INIT(const struct better_api_t* betterapi) {
-        // Currently nothing is done to initialize the beterapi system
-        // this may change in the future
+extern bool betterapi_check_compatibility(const struct better_api_t* betterapi) {
+        // I already made an API oopsie in the first version of the api,
+        // the released betterconsole 1.3.1 does not perform api version checking
+        // and even if it did, calling betterapi->Callback->RegisterMod() might not
+        // work as intended if the api is incompatible (duh). How am I going to resolve this?
+        // 
+        // The next version of the api will put a never changing api as the first 
+        // pointer in the betterapi struct. Currently this is used for the hook_api_t*
+        // so we need to imagine if this was the future...
+        const struct betterapi_version_t* const version = *(const struct betterapi_version_t* const * const)betterapi;
+
+        // this check will specifically allow betterconsole 1.3.1 but not any
+        // future breaking api change, once we create a version struct where the hookapi goes
+        // this will fail, assuming the pointers will be > 65536 (they should be)
+        if (((uintptr_t)version > 65536) && (version->betterapi_version < 65536)) {
+                return false;
+        }
+
+        return true;
 }
 #endif // BETTERAPI_IMPLEMENTATION
