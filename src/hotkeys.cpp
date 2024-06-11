@@ -44,7 +44,7 @@ const static auto SimpleDraw = GetSimpleDrawAPI();
 
 // this is how hotkeys are put together
 static uint16_t make_hotkey(unsigned vk_key, bool control, bool alt, bool shift) {
-        return vk_key | ((control & 1) << 10) | ((alt & 1) << 9) | ((shift & 1) << 8);
+        return (vk_key & 0xFF) | ((control & 1) << 10) | ((alt & 1) << 9) | ((shift & 1) << 8);
 }
 
 
@@ -113,7 +113,10 @@ static void rebuild_hotkey_cache() {
 
 
 // wndproc calls this for every WM_KEYDOWN message
-extern void HotkeyReceiveKeypress(unsigned vk_key, bool control, bool alt, bool shift) {
+extern void HotkeyReceiveKeypress(unsigned vk_key) {
+        const bool control = GetAsyncKeyState(VK_CONTROL);
+        const bool alt = GetAsyncKeyState(VK_MENU);
+        const bool shift = GetAsyncKeyState(VK_SHIFT);
         const auto key = make_hotkey(vk_key, control, alt, shift);
 
         // first check if we are waiting for a keypress to set a hotkey

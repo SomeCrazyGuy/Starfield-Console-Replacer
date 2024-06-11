@@ -71,11 +71,15 @@ static const BetterAPI* API = nullptr;
 static const hook_api_t* HookAPI = nullptr;
 static const log_buffer_api_t* LogBuffer = nullptr;
 static const simple_draw_t* SimpleDraw = nullptr;
+static const config_api_t* Config = nullptr;
+
 static char IOBuffer[256 * 1024];
 static LogBufferHandle OutputHandle;
 static LogBufferHandle HistoryHandle;
 static std::vector<uint32_t> SearchOutputLines{};
 static std::vector<uint32_t> SearchHistoryLines{};
+
+static uint32_t NumHotkeys = 0;
 
 static void forward_to_old_consoleprint(void* consolemgr, const char* fmt, ...) {
         if (!consolemgr) return;
@@ -239,6 +243,17 @@ static bool strcasestr(const char* s, const char* find) {
         return true;
 }
 
+
+
+static void CALLBACK_console_settings(enum ConfigAction action) {
+       
+}
+
+
+
+
+
+
 // this should be the only interface between the console replacer and the mod menu code
 extern void setup_console(const BetterAPI* api) {
         API = api;
@@ -247,11 +262,12 @@ extern void setup_console(const BetterAPI* api) {
         //TODO: add console hotkeys tab
         
         const auto CB = API->Callback;
-        const auto handle = CB->RegisterMod("BetterConsole", BETTERAPI_VERSION);
+        const auto handle = CB->RegisterMod("BetterConsole");
         CB->RegisterDrawCallback(handle, draw_console_window);
 
         HookAPI = API->Hook;
         SimpleDraw = API->SimpleDraw;
+        Config = API->Config;
 
         OutputHandle = LogBuffer->Create("Console Output", OUTPUT_FILE_PATH);
         HistoryHandle = LogBuffer->Restore("Command History", HISTORY_FILE_PATH);

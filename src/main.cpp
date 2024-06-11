@@ -417,7 +417,7 @@ extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface*) {}
 
 extern "C" __declspec(dllexport) void BetterConsoleReceiver(const struct better_api_t* api) {
         BETTERAPI_INIT(api);
-        const auto handle = api->Callback->RegisterMod("(internal)", BETTERAPI_VERSION);
+        const auto handle = api->Callback->RegisterMod("(internal)");
         api->Callback->RegisterConfigCallback(handle, Callback_Config);
         api->Callback->RegisterHotkeyCallback(handle, OnHotheyActivate);
         
@@ -521,25 +521,8 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         static bool ctrl = false;
         static bool alt = false;
 
-        if (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) {
-                if (wParam == VK_SHIFT || wParam == VK_LSHIFT || wParam == VK_RSHIFT) {
-                        shift = true;
-                } else if (wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL) {
-                        ctrl = true;
-                } else if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
-                        alt = true;
-                } else {
-                        unsigned vk_key = wParam & 0xFF;
-                        HotkeyReceiveKeypress(vk_key, ctrl, alt, shift);
-                }
-        } else if (uMsg == WM_KEYUP || uMsg == WM_SYSKEYUP) {
-                if (wParam == VK_SHIFT || wParam == VK_LSHIFT || wParam == VK_RSHIFT) {
-                        shift = false;
-                } else if (wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL) {
-                        ctrl = false;
-                } else if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
-                        alt = false;
-                }
+        if (uMsg == WM_KEYDOWN) {
+                HotkeyReceiveKeypress(wParam);
         }
 
         if (should_show_ui) {

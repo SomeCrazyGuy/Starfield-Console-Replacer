@@ -28,6 +28,8 @@ struct ConfigFile {
         HANDLE out_file;
         const char* mod_name;
         char file_path[MAX_PATH];
+        char* write_buffer;
+        uint32_t write_buffer_size;
 };
 
 static ConfigFile* BetterConsoleConfig = nullptr;
@@ -49,11 +51,11 @@ static uint64_t hash_fnv1a(const char* str) {
 extern ConfigFile* ConfigLoadFile(const char* filename) {
         DEBUG("Reading config file: '%s'", filename);
 
-        // Allocate a settingsfile object
+        // can you tell I'm more comfortable with C than C++?
         ConfigFile* const ret = (decltype(ret))calloc(1, sizeof(*ret));
         ASSERT(ret != NULL && "Malloc actually failed");
 
-        // Initialize c++ objects in the struct
+        // Initialize c++ object in the struct
         ::new (&ret->lines) decltype(ret->lines);
 
         // Open settings file
@@ -67,9 +69,10 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
         ASSERT(li_file_size.QuadPart < UINT32_MAX && "File too large >4GB");
         const auto file_size = (uint32_t)li_file_size.QuadPart;
 
-        // Round allocation up to page size
+        // Round allocation up to page size and make sure there is space to add
+        // a newline character and null terminator
         ret->buffer_size = (((file_size + 2ULL) + 4095) & ~uint64_t{ 4095 });
-        ASSERT(file_size < ret->buffer_size && "Math failed me");
+        ASSERT((file_size +2ULL) <= ret->buffer_size && "Math failed me");
 
         // Allocate memory for file
         ret->file_buffer = (unsigned char*)malloc(ret->buffer_size);
@@ -90,8 +93,9 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
         // keys are composed of 2 parts: "mod_name : key_name"
         // this allows different plugins to have the same key_name without collisions
         // avoid non-printing characters in keys, while the parser doesn't care, the file is intended to be plain utf8
-        // newline characters in keys is restricted (triggers assert)
-        // whitespace characters at the beginning and end of keys is restricted (triggers assert)
+        // newline characters in keys is restricted (will cause parser to ignore)
+        // whitespace characters at the beginning and end of keys will be trimmed
+        // keys cannot start with the '#' character (parser will treat it as a comment and ignore it)
         // whitespace is trimmed from the left of mod_name and the right of key_name (the join with ':' is assumed to be correct)
         // text in values is quoted and escaped, so newline restrictions and whitespace trimming does not effect values
         // duplicate keys in the settings file have no guarantees on which one is retrieved during lookup
@@ -101,45 +105,56 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
         // the settings file is utf8 encoded, should be plain text, and is human readable / editable
         // memory consumption for the settings file is the size of the file + (16 bytes * number_of_newlines) + a constant overhead
         // the settings file buffer is never freed for the life of the application, its always valid to try to read a setting
+        // any line where the first non-whitespace character is '#' is treated as a comment and is ignored
+
 
         enum token_type : unsigned char {
-                TT_NONE,
+                TT_NONE = 0,
                 TT_NULL,
                 TT_NEWLINE,
                 TT_EXCLAIM,
         };
 
-        unsigned char lookup['!' + 8 & ~7]; //lol
+        // lookup table for the parser
+        // the only characters the parser cares about are NULL '\0', newline '\n', and the exclaimation mark '!'
+        // using some smart (or cursed) programming, the lookup table for the parser can be significantly
+        // smaller than the 256 possible bytes it could encounter
+        // the following parser state is only 64 bytes and should fit into a single cpu cache line
+        unsigned char lookup[40];
+        unsigned char* f = ret->file_buffer - 1; //yep, this is initialized to a value outside the array
+        unsigned char* expos = nullptr; //the position of the exclaimation mark on the current line
+        unsigned char* lastlf = f; //also intentionally initialized to a value outside the array
         memset(lookup, TT_NONE, sizeof(lookup));
         lookup[0] = TT_NULL;
         lookup['\n'] = TT_NEWLINE;
         lookup['!'] = TT_EXCLAIM;
 
-        unsigned char* f = ret->file_buffer;
-        unsigned char* expos = nullptr;
-        unsigned char* lastlf = f - 1;
+        for (;;) { //yep, this loop is endless, that makes the branch predictor happy
+                ++f;
 
-        for (;; ++f) {
                 const unsigned char c = *f;
 
-                //the most common case (>80% of standard utf8 text)
+                // the most common case (>80% of standard utf8 text)
+                // since the only characters the parser cares about are <= '!'
+                // this tight loop in the first branch makes the predictor very happy
                 if (c > '!') continue;
 
                 const auto t = lookup[c];
 
-                // next most common case
+                // the next most common case would be space ' ' or another
+                // character the parser doesnt need to care about
                 if (!t) continue;
 
-                // there could be more '!' characters than newlines
-                if (t == TT_EXCLAIM) {
-                        expos = f;
-                        continue;
-                }
-
+                // we are down to only 3 possible options: TT_NULL, TT_NEWLINE, and TT_EXCLAIM
+                // considering that comment lines are a thing then newline would be more 
+                // common than the '!' character, so check that first
                 if (t == TT_NEWLINE) {
                         // the parser found a newline character
+                        // this is where we actually try to parse the line
+                        // remove whitespace, etc...
                         // we know where the last newline was `lastlf`
                         // we also know if an exclaimation was found `expos`
+                        // we know where the current line ends `f`
                         // we can determine where the keys and values are using only this info
                         unsigned char* keypos = lastlf + 1;
                         lastlf = f;
@@ -154,26 +169,39 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
 
                         if (keypos == valpos) continue; //key was empty
 
+                        if (*keypos == '#') continue; //this is a comment line, ignore
+
                         //step 2: key is not empty, so trim space on the right
                         unsigned char* null_maker = valpos;
-                        *null_maker = 0; // null out the '!' character
-                        while (::isspace(*null_maker)) *null_maker-- = 0;
+                        do {
+                                // on the first iteration, null out the '!' character unconditionally
+                                *null_maker = 0; 
+                                --null_maker;
+                        } while (::isspace(*null_maker));
 
-                        //keypos is null terminated, not empty, and trimmed
+                        //keypos is now null terminated, not empty, and trimmed
 
                         //Step 4: right trim the value
                         null_maker = f;
-                        while (::isspace(*null_maker)) *null_maker-- = 0;
+                        do {
+                                // on the first iteration, null out the newline '\n' character unconditionally
+                                *null_maker = 0;
+                                --null_maker;
+                        } while (::isspace(*null_maker));
 
                         if (null_maker == valpos) continue; //value was empty
 
                         //step 5: left trim the value
-                        ++valpos; //advance past the (now null) '!' character
-                        while (::isspace(*valpos)) ++valpos;
+                        do {
+                                //on the first iteration, advance past the (now null) '!' character unconditionally
+                                ++valpos; 
+                        } while (::isspace(*valpos));
 
-                        //valpos is null terminated, not empty, and trimmed
+                        //valpos is now null terminated, not empty, and trimmed
 
                         // finally, insert the key and value into the array
+                        // the value is not actually parsed until something
+                        // tries to read the key, so the parse time is also lower
                         Setting s{};
                         const auto buffer_start = ret->file_buffer;
                         s.key_hash = hash_fnv1a((const char*)keypos);
@@ -181,14 +209,43 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
                         s.value_offset = (uint32_t)(valpos - buffer_start);
                         DEBUG("KEY{%s}, VALUE{%s}, HASH{%p}", keypos, valpos, (void*)s.key_hash);
                         ret->lines.push_back(s);
+                        // a fun excerise is that now would be the perfect time
+                        // for a parser in another thread to transform the value in-place
+                        // values are escaped or otherwise encoded in the config file
+                        // and we could unescape or decode it while this thread continues to parse
+                        // the config file, heck we could evem perform the fnv1a hash on the
+                        // other thread too, which would very evenly split the amount of work
+                        // nearly in half, im not sure any other parser out there could do that
+                        // due to our format being so simple.
+                        // but for now, we just leave it as-is
+
                         continue;
                 }
+
+                // we are down to only 2 possible options: TT_EXCLAIM or TT_NULL
+                // TT_EXCLAIM is the most common as we would only parse TT_NULL once
+                // in the entire file, then terminate the parser loop
+                if (t == TT_EXCLAIM) {
+                        expos = f;
+                        continue;
+                }
+
                 // the only other option is the terminating condition: TT_NULL
-                // so unconditionally break out of the parsing loop
+                // if control flow reaches here we terminate the loop unconditionally
+                // no need to even check if the current token is TT_NULL
+                // in fact, we dont actually check for a null at all anywhere in the parser
+                // we just kind of deduce a null by the process of elimination
+                // i dont really see other parsers out there that would do that
+                // usually most hand written parsers would start off with a for loop like:
+                // for (char *cur = buffer; (*cur && (cur != buffer_end)); ++cur)
+                // or:
+                // for (size_t i = 0; buffer[i] && (i < buffer_size); ++i)
+                // but we eliminated the need for both of those conditions
                 break;
         }
-        // the while file is sorted and adding keys at runtime is not supported
-        // use std::equal_range to perform lookups instead of hash table
+        // because adding key value pairs at runtime is not necessary in this api
+        // we can just sort the array once and use std::equal_range to perform
+        // hash lookups instead of building a hash table
         std::sort(ret->lines.begin(), ret->lines.end());
         return ret;
 }

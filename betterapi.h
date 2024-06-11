@@ -75,6 +75,23 @@
 #include <stdbool.h>
 
 
+// you might see the use of BETTERAPI_DEVELOPMENT_FEATURES in the code below.
+// these are features that will be in the next version of betterconsole but
+// not part of the current release on nexusmods.
+// 
+// adding more functions to the end of the api structs does not break the api
+// so development features will usually always be added to the end of the struct
+// this allows the lastest betterapi header to be compatible with older versions
+// of betterconsole.
+//
+// if you are developing a mod using the betterconsole api you MUST NOT define
+// BETTERAPI_DEVELOPMENT_FEATURES, as the resulting plugin will not be compatible
+// with the version of betterconsole that everyone is using.
+#ifdef BETTERAPI_DEVELOPMENT_FEATURES
+#pragma message ("BETTERAPI_DEVELOPMENT_FEATURES is defined, any plugin using the api will not be compatible the nexusmods release of betterconsole.")
+#endif // BETTERAPI_DEVELOPMENT_FEATURES
+
+
 // Version number for betterapi, when a new version of betterconsole
 // changes the public API this number is incremented. Usually only when
 // bigger feature changes are added - I will not break the API in a bugfix
@@ -221,10 +238,7 @@ struct callback_api_t {
         //                 - must be less than 32 characters
         //                 - must have a length of >3 characters
         //                 - must not begin or end with whitespace
-        // 
-        // `betterapi_version` is the version of the BetterConsole API your mod uses
-        //                     you should pass BETTERAPI_VERSION unmodified to this function
-        RegistrationHandle(*RegisterMod)(const char* mod_name, uint32_t betterapi_version);
+        RegistrationHandle(*RegisterMod)(const char* mod_name);
         
 
         // Register a function to show your mod's user interface.
