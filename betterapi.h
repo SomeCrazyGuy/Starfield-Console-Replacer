@@ -50,6 +50,11 @@
 //             having to include any other headers or libraries not even any sfse code.
 //             I have written and included an example of how to use this near the
 //             bottom of the file.
+//
+// 
+// You can always reach out to me if you have any questions or need help integrating betterapi
+// I'm almost always available in the v2 discord or nexusmods.
+//
 
 
 // Betterconsole is written in C++ but the public API is plain C99
@@ -61,7 +66,7 @@
 // using only builtin types and defines, then the interface is not
 // simple enough. Since almost every programming language has some type
 // of C compatible foreign function interface, this allows you to write
-// mods in almost any programming language albeit with some limitations.
+// mods in almost any programming language albeit with some challenges.
 #ifdef __cplusplus
 #define DLLEXPORT extern "C" __declspec(dllexport)
 #else
@@ -73,21 +78,34 @@
 
 // Version number for betterapi, when a new version of betterconsole
 // changes the public API this number is incremented. Usually only when
-// bigger feature changes are added I will not break the API in a bugfix
-// releas of betterconsole and feature releases are not expected to happen
-// more often than starfield updates.
+// bigger feature changes are added - I will not break the API in a bugfix
+// release of betterconsole and feature releases are not expected to happen
+// more often than starfield updates. Usually porting to a new version
+// of the api is as easy as dropping in the new betterapi.h into your build
+// and fixing anything the compiler complains about (if anything).
+//
+// Recommendation: always use the latest betterapi header in your build as
+//                 long as the BETTERAPI_VERSION is compatible with the published
+//                 version of betterconsole on nexusmods - sometimes small hacks
+//                 or fixes are put here to fix issues in the published mod
+//                 between releases. Likewise, when the published version of
+//                 betterconsole changes, you should update betterapi.h and
+//                 recompile your mod to fix any subtle issues that may arise.
 #define BETTERAPI_VERSION 1
 
 
-// Foreward declaration of the main betterapi structure.
+// Forward declaration of the main betterapi structure.
 // you will receive this as the only argument in your BetterConsoleReceiver
-// From how this has been used internally, you may want to assign the individual
-// fields of this structure to const global variables to avoid writing 
-// "api->structure->function" all over the place.
+// From how this has been used internally, you might find it convenient to
+// store the fields of this structure to static global variables to avoid
+// writing "betterapi->structure->function" all over the place.
 struct better_api_t;
 
-// Foreward declaration of init function, call this first in your BetterConsoleReceiver
+
+// Forward declaration of init function, call this first in your BetterConsoleReceiver
 // function to initialize the betterapi system before using any of the api.
+// this allows me to do some quick hacks, extra checks, or other fixes if needed
+// without needing to update the main mod itself
 void BETTERAPI_INIT(const struct better_api_t* betterapi);
 
 
@@ -307,87 +325,139 @@ struct hook_api_t {
 // if you play your cards right, you can write an entire mod without any other
 // headers or libraries... not even the standard library!
 struct simple_draw_t {
-        // draw a separator line
+        // Draw a separator line that fills the horizontal space
         void (*Separator)(void);
 
-        // draw some text, supports format specifiers
+        // Draw some text, supports format specifiers
         void (*Text)(const char *fmt, ...);
 
-        // draw a button, returns true if the button was clicked
+
+        // Draw a button, returns true if the button was clicked
+        // Example:
+        // if (SimpleDraw->Button("Hello")) { /* do something on click */ }
         bool (*Button)(const char* name);
 
-        // draw a checkbox, needs to store persistent state so pass a static boolean pointer
-        // returns the value of *state for convenience in an 'if' statement
+
+        // Draw a checkbox, this widget needs to store persistent state
+        // usually you would pass a static bool as a pointer
+        // returns true if the state was changed this frame
+        // Example:
+        // static bool state = false;
+        // if (SimpleDraw->Checkbox("Hello", &state)) { /* do something on state change */ }
         bool (*Checkbox)(const char* name, bool* state);
 
-        // draw a text input widget for a single line of text
-        // buffer is where the text is stored
-        // true_on_enter determines if the widget returns true on every character typed or only when enter is pressed
+
+        // Draw a text input widget for a single line of text
+        // `buffer` will be used to store the text the user types
+        // `true_on_enter` determines if the widget returns true on every character
+        //                 typed or only when enter is pressed
+        // Example:
+        // static char buffer[32];
+        // if (SimpleDraw->InputText("Hello", buffer, sizeof(buffer), true)) { /* do something on enter */ }
         bool (*InputText)(const char* name, char* buffer, uint32_t buffer_size, bool true_on_enter);
 
 
-        // split the remainaing space into a left and right region
-        // the left region occupies a left_size (eg: .5) fraction of the screen
+        // Split the remainaing window space into a left and right region.
+        // the left region occupies a `left_size` (eg: .5) fraction of the screen
         // the remaining space is reserved for the HBoxRight() side
-        // min_size is a safety minimum number of charactes wide that hboxleft can be
+        // `min_size_em` is a safety minimum number of charactes wide that the
+        // HBoxLeft region can be and overrides the `left_size` if it is smaller.
+        // If you call HBoxLeft, you must also call HBoxRight and HBoxEnd
+        // HBox and VBox regions can be nested for more complex layouts but
+        // are more performance intensive tham most other SimpleDraw functions.
         void (*HBoxLeft)(float left_size, float min_size_em);
 
-        // the counterpart of HBoxLeft 
-        // no argument needed, the size is the remaining space not taken up by hbox left
+
+        // Move to the right side region after a call to HBoxLeft
+        // no argument needed, the size of the region is the remaining
+        // space not taken up by HBoxLeft
         void (*HBoxRight)();
 
-        // needed to end hbox calculation
+
+        // Finish the HBoxLeft and HBoxRight regions
+        // no argument needed, this signals the end of the region
+        // and resumes normal layout
         void (*HBoxEnd)();
 
-        //this is the same as hbox, but for vertically separated spaces
+
+        // This is the same as hbox, but for vertically separated spaces
         void (*VboxTop)(float top_size, float min_size_em);
         void (*VBoxBottom)();
         void (*VBoxEnd)();
 
 
-        // display an int number editor as a draggable slider that is also editable
-        // min and max define the range of the *value
-        // step defines the granilarity of the movement
+        // Display an int number editor as a draggable slider that
+        // can be double-clicked to edit the value directly.
+        // `min` and `max` define the range of the *value
         // the return value is true if the value was changed this frame
         bool (*DragInt)(const char* name, int* value, int min, int max);
 
-        // follows the same rules as the sliderint above
+
+        // Follows the same rules as the sliderint above
         bool (*DragFloat)(const char* name, float* value, float min, float max);
 
 
-        // use the remaining vertical space to render the logbuffer referenced by handle
-        // if scroll_to_bottom is true, force the logbuffer region to scroll from its current position
-        // to the bottom (useful when you add lines)
+        // Use the remaining vertical space to render the logbuffer
+        // `handle` is the logbuffer handle to render
+        // `scroll_to_bottom` if true, force the logbuffer region to scroll
+        //                    from its current position to the end (newest data)
         void (*ShowLogBuffer)(LogBufferHandle handle, bool scroll_to_bottom);
 
-        // use the remaining vertical space to render the logbuffer referenced by handle
-        // if scroll_to_bottom is true, force the logbuffer region to scroll from its current position
-        // takes a pointer to an array of line numbers and only displays those lines in the widget
+
+        // Use the remaining vertical space to render a filtered logbuffer
+        // `handle` is the logbuffer handle to render
+        // `lines` is an array of line numbers to display
+        // `line_count` is the number of lines to display from the `lines` array
+        // `scroll_to_bottom` if true, force the logbuffer region to scroll
+        //                    from its current position to the end (newest data)
         void (*ShowFilteredLogBuffer)(LogBufferHandle handle, const uint32_t* lines, uint32_t line_count, bool scroll_to_bottom);
 
-        // Show a selectable list of text items, returns true when the selection changes.
-        // `selection` is the index of the selected item and should be static
+
+        // Show a selectable list of text items.
+        // returns true when the user click on an item and the selection changes.
+        // `selection` is the index of the selected item and should be a static variable
         // `userdata` is any arbitrary data that you want to pass to the callback
         // `count` is the number of items in the list
-        // proper clipping and scrolling is performed to make even very long lists efficient
+        // `to_string` is a function that converts an index and userdata into a string
+        //             an is called for each *visible* item in the list every frame.
+        // Proper clipping of non-visible items is done automatically so large lists
+        // can be drawn in a performant manner.
+        // Usually you would want to contain this in an HBox or VBox otherwise
+        // it will take up all remaining horizontal and vertical space.
         bool(*SelectionList)(uint32_t *selection, const void* userdata, uint32_t count, CALLBACK_SELECTIONLIST to_string);
 
-        // draw a table one cell at a time through the `draw_cell` callback
-        // the number of columns is set to `header_count` because those numbers shoud be the same
-        // proper vertical and horizontal clipping and scrolling is done to accelerate very large tables
+
+        // Draw a table one cell at a time through the `draw_cell` callback
+        // `header_labels` is an array of strings that are the column headers
+        // `header_count` is the number of strings in the `header_labels` array
+        //                this is assumed to be the same as the count of columns
+        // `table_userdata` is any arbitrary data that you want to pass to the callback
+        // `row_count` is the number of rows in the table, the total number of cells in
+        //             the table is row_count * header_count
+        // `draw_cell` is a callback that is called for each *visible* cell in the table
+        // Proper vertical and horizontal clipping is done to accelerate even very large tables
         void (*Table)(const char * const * const header_labels, uint32_t header_count, void* table_userdata, uint32_t row_count, CALLBACK_TABLE draw_cell);
+
 
         // draw tabs that can be switched between
         void (*TabBar)(const char* const* const headers, uint32_t header_count, int* state);
 
-        // draw buttons in a row, returns the index of the selected button
+
+        // draw buttons in a row, similar to a tookbar
+        // returns -1 if no button was pressed this frame (common case)
+        // otherwise returns the index of the button pressed this frame
+        // `labels` is an array of strings that are the button labels
+        // `label_count` is the number of strings in the `labels` array
+        //               this is assumed to be the count of buttons
         int (*ButtonBar)(const char* const* const labels, uint32_t label_count);
+
 
         // show a tooltip marker that looks like "(?)"
         // when the user hovers over the marker `text` will be shown
         void (*Tip)(const char* text);
 
-        //place multiple simpledraw elements on the same line
+
+        // place multiple simpledraw elements on the same line
         void (*SameLine)();
 };
 
@@ -481,25 +551,32 @@ typedef struct better_api_t {
 /*
 // Step 1) Export this struct so sfse knows your DLL is compatible
 DLLEXPORT SFSEPluginVersionData SFSEPlugin_Version = {
-        1,                            // SFSE api version, 1 is current
+        1,     // SFSE api version, 1 is current
 
-        1,                            // Plugin api version, 1 is current
+        1,     // Plugin api version, 1 is current
 
-        "BetterConsole",              // Mod/Plugin Name (limit: 256 characters)
+        "BetterConsole",   // Mod/Plugin Name (limit: 255 characters)
 
-        "Linuxversion",               // Mod Author(s)   (limit: 256 characters)
+        "Linuxversion",    // Mod Author(s)   (limit: 255 characters)
 
-        1,                            // <0 uses hardcoded offsets (game version specific)>
-                                      // <1 uses signatures (not game version specific)>
+               // Address Independance:
+        1,     // 0 - hardcoded offsets (game version specific)
+               // 1 - signature scanning (not version specific)
 
-        1,                            // <0 relies on specific game structs>
-                                      // <1 mod does not care if game structs change>
+               // Structure Independance:
+        1,     // 0 - relies on specific game structs
+               // 1 - mod does not care if game structs change
 
-        {MAKE_VERSION(1, 11, 36), 0}, // compatible with game version 1.11.36
+                                          // Compatible Game Versions:
+        {                                 // A list of up to 15 game versions
+                MAKE_VERSION(1, 11, 36),  // This means compatible with 1.11.36
+                0                         // The list must be terminated with 0
+        },                                // if address & structure independent
+                                          // then this is minimum version required
 
-        0,                            // 0 = does not rely on any specific sfse version
+        0,      // 0 = does not rely on any specific sfse version
 
-        0, 0                          // reserved fields, must be 0
+        0, 0               // reserved fields, must be 0
 };
 
 // Step 2) Export this function so sfse knows to load your dll.
