@@ -8,8 +8,6 @@
 
 
 extern void draw_gui() {
-        static ImGuiTabItemFlags ConsoleDefaultFlags = ImGuiTabItemFlags_SetSelected;
-        
         static bool once = false;
         if (!once) {
                 const auto screen = ImGui::GetIO().DisplaySize;
@@ -72,6 +70,7 @@ extern void draw_gui() {
                                 char path[260];
                                 ShellExecuteA(NULL, "open", GetPathInDllDir(path, "BetterConsoleConfig.txt"), NULL, NULL, 1);
                         }
+                        ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();
                 ImGui::EndTabItem();

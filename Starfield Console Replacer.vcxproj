@@ -112,7 +112,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile Include="src\hotkeys.cpp" />
     <ClCompile Include="src\log_buffer.cpp" />
     <ClCompile Include="src\main.cpp" />
-    <ClCompile Include="src\minhook_bridge.c" />
+    <ClCompile Include="src\minhook_unity_build.c" />
     <ClCompile Include="src\settings.cpp" />
     <ClCompile Include="src\simpledraw.cpp" />
     <ClCompile Include="src\std_api.cpp" />
@@ -138,7 +138,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="src\hotkeys.h" />
     <ClInclude Include="src\log_buffer.h" />
     <ClInclude Include="src\main.h" />
-    <ClInclude Include="src\minhook_bridge.h" />
+    <ClInclude Include="src\minhook_unity_build.h" />
     <ClInclude Include="src\settings.h" />
     <ClInclude Include="src\simpledraw.h" />
     <ClInclude Include="src\std_api.h" />
