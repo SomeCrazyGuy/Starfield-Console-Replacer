@@ -1,9 +1,25 @@
 #ifndef BETTERAPI_API_H
 #define BETTERAPI_API_H
 
+// Always use the latest betterapi.h file from github in your build if the BETTERAPI_VERSION
+// number is compatible with the published version of betterconsole on nexusmods.
+// sometimes small hacks or fixes are put here to fix issues in the published mod between releases.
+// https://raw.githubusercontent.com/SomeCrazyGuy/Starfield-Console-Replacer/master/betterapi.h
 
-// Integrate betterconsole in your mod in 3 easy steps:
-// 
+
+// Version number for betterapi, when a new version of betterconsole changes the public API
+// this number is incremented. Usually only when bigger feature changes are added.
+// I will not break the API in a bugfix release of betterconsole and feature releases
+// are not expected to happen more often than starfield updates.
+// Usually porting to a new version of the api is as easy as dropping in the new betterapi.h
+// into your build and fixing the compiler errors (if any).
+#define BETTERAPI_VERSION 1
+
+
+///////////////////////////////////////////////////////////////////////////////
+//         Gain BetterConsole features for your mod in 2 easy steps:         //
+///////////////////////////////////////////////////////////////////////////////
+
 // Step 1) Include "betterapi.h" anywhere you want to use the api
 // 
 // 
@@ -49,28 +65,49 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
         // Maybe save the betterapi pointer to a global variable use elsewhere
         //API = BetterAPI;
 
-        // I find it convenient to even unwrap the internal api pointers and assign them to globals
+        // I often find it convenient to assign the api pointers to global variables
         // UI = BetterAPI->SimpleDraw
 
         return 0; // return 0 for success or any positive number to indicate a failure
 }
 
 */
-// 
-// Step 3) Enjoy! betterapi integration is a soft dependency so if a user doesn't have
-//         or want betterconsole installed, or betterconsole updates and your mod is no
-//         longer compatible then your mod just works the way it would without the
-//         betterconsole features and api. If your mod can function without betterconsole
-//         you dont need to do any additional work, the OnBetterConsoleLoad function
-//         just wont be called.
+// Sit back and relax! The callbacks registered will be called automatically when
+// necessary. For example, lets implement that MyDrawCallback function above and
+// assume we also decided to set that UI global variable to the SimpleDraw api:
+/*
+
+static void MyDrawCallback(void*) {
+        static int counter = 0;
+
+        UI->Text("Hello World!");
+
+        if (UI->Button("Click Me!")) {
+                counter++;
+        }
+
+        char label[128];
+        snprintf(label, 128, "You Clicked the button %d times", counter);
+
+        UI->Text(label);
+}
+
+*/
+// Betterapi integration is a soft dependency - if a user doesn't have
+// or want betterconsole installed, or betterconsole updates and your mod is no
+// longer compatible, then your mod just works the way it would without the
+// betterconsole features and api. If your mod can function without betterconsole
+// you dont need to do any additional work - the OnBetterConsoleLoad function
+// just wont be called.
 //
 //
-// Bonus Step: If you are writing an asi mod or trying to port a cheat engine table,
-//             you may want to Control+F for SFSE_MINIMAL. You can utilize the sfse
-//             minimal api to make your mod into a combo asi and sfse plugin without
-//             having to include any other headers or libraries not even any sfse code.
-//             I have written and included an example of how to use this near the
-//             bottom of the file.
+// Bonus Step:
+// If you are writing an asi mod or trying to port a cheat engine table,
+// you may want to Control+F for SFSE_MINIMAL. You can utilize the sfse
+// minimal api to make your mod into a combo asi and sfse plugin without
+// having to include any other headers or libraries not even any sfse code.
+// I have written and included an example of how to use this near the
+// bottom of the file.
 //
 // 
 // You can always reach out to me if you have any questions or need help integrating betterapi
@@ -78,30 +115,22 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
 //
 
 
-// Betterconsole is written in C++ but the public API is plain C99
-// and only includes headers that are from the C standard library 
-// (only for types and defines, no C library functions are called).
-// This makes it easier to integrate betterconsole into any project
-// because the whole API is one header file with no other dependencies.
-// On a philisophical level, if you cannot describe an interface in C
-// using only builtin types and defines, then the interface is not
-// simple enough. Since almost every programming language has some type
-// of C compatible foreign function interface, this allows you to write
-// mods in almost any programming language albeit with some challenges.
+// Betterconsole is written in C++ but the public API is plain C99 and only includes
+// headers that are from the C standard library no C library functions are even 
+// called by betterapi. This makes it easier to integrate betterconsole into any
+// project because the whole API is one header file with no other dependencies. On a
+// philisophical level, if you cannot describe an interface in C then the interface
+// is not simple enough. Since almost every programming language has some type of C
+// compatible foreign function interface, this allows you to write mods in almost
+// any programming language albeit with some challenges.
 #include <stdint.h> 
 #include <stdbool.h>
 
 
-// you might see the use of BETTERAPI_DEVELOPMENT_FEATURES in the code below.
+// You might see the use of BETTERAPI_DEVELOPMENT_FEATURES in the code below.
 // these are features that will be in the next version of betterconsole but
 // not part of the current release on nexusmods.
-// 
-// adding more functions to the end of the api structs does not break the api
-// so development features will usually always be added to the end of the struct
-// this allows the lastest betterapi header to be compatible with older versions
-// of betterconsole.
-//
-// if you are developing a mod using the betterconsole api you MUST NOT define
+// If you are developing a mod using the betterconsole api you MUST NOT define
 // BETTERAPI_DEVELOPMENT_FEATURES, as the resulting plugin will not be compatible
 // with the version of betterconsole that everyone is using.
 #ifdef BETTERAPI_DEVELOPMENT_FEATURES
@@ -109,39 +138,50 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
 #endif // BETTERAPI_DEVELOPMENT_FEATURES
 
 
-// Version number for betterapi, when a new version of betterconsole
-// changes the public API this number is incremented. Usually only when
-// bigger feature changes are added - I will not break the API in a bugfix
-// release of betterconsole and feature releases are not expected to happen
-// more often than starfield updates. Usually porting to a new version
-// of the api is as easy as dropping in the new betterapi.h into your build
-// and fixing anything the compiler complains about (if anything).
+//           A note about thread safety
+// There is no thread safety all of the betterapi functions are operating within
+// the game's idxgiswapchain::present function as the game is trying submit a 
+// frame to the gpu. Do not use any of these apis from a separate thread unless
+// it is explicitly marked as safe to do so and please keep it quick - we don't
+// want to slow down the game. I will add an api for a separate task thread to
+// do sig scanning or other slow tasks in a future update.
+
+
+//            A note about "userdata"
+// Several of the APIs in BetterConsole take a "userdata" argument
+// since we are exposing all these capabilities in plain C99 we
+// need a way to express a generic type or piece of data that you
+// want to work with. Often this will show up in the SimpleDraw functions.
+// Lets look at an example of why and how you would do this...
+// 
+// say you have an array of pointers to some struct:
+// struct GameType {
+//      ...
+//      uint32_t formid;
+//      ...
+//      const char* name;
+//      ...
+// } *data_array[100] = some_pointer;
+// 
+// how would you make a selectable list of these in a gui that knows nothing
+// about GameType? The answer is userdata and a callback!
+// 
+// Create a to_string function for GameType:
+// 
+// const char* gametype_to_string(const void* userdata, uint32_t index, char* out_tmp, uint32_t tmp_size) {
+//      const GameType** pGT = (const GameType**)userdata;
+//      const GameType* GT = pGT[index];
+//      snprintf(out_tmp, tmp_size, "FormID: %X, Name: %s", GT->formid, GT->name);
+//      return out_tmp;
+// }
+// 
+// Then make is a selectable list:
+// 
+// static uint32_t selected_item = 0;
+// bool was_clicked = SimpleDraw->SelectionList(&selected_item, (const void*)data_array, 100, gametype_to_string);
 //
-// Recommendation: always use the latest betterapi.h file from github in your build
-//                 as long as the BETTERAPI_VERSION is compatible with the published
-//                 version of betterconsole on nexusmods - sometimes small hacks
-//                 or fixes are put here to fix issues in the published mod
-//                 between releases. Likewise, when the published version of
-//                 betterconsole changes, you should update betterapi.h and
-//                 recompile your mod to fix any issues that may arise.
-#define BETTERAPI_VERSION 1
-
-
-// Forward declaration of the main betterapi structure.
-// you will receive this as the only argument in your BetterConsoleReceiver
-// From how this has been used internally, you might find it convenient to
-// store the fields of this structure to static global variables to avoid
-// writing "betterapi->structure->function" all over the place.
-struct better_api_t;
-
-
-
-// Note: this API is not thread safe,
-// all of the below functions are operating within idxgiswapchain::present
-// as the game is trying submit a frame to the gpu
-// do not use any of these apis from a separate thread
-// and please keep it quick, don't slow down the game
-// I will add an api for a separate task thread to do sig scanning or other slow tasks
+// now the user can scroll through and click on an entry in the list without
+// the UI code ever needing to know what the heck a GameType is
 
 
 // Opaque handle for the log buffer system
