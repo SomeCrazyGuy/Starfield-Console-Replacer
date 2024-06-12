@@ -43,20 +43,20 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
         
         // First register your mod with betterconsole by providing a mod name
         // you could save the handle for later use, but most of the time you can
-        // just register the callback you want upfront and then forget about the handle
+        // just register any callbacks you want upfront then forget about the handle
         RegistrationHandle my_mod_handle = BetterAPI->Callback->RegisterMod("My Mod Name");
 
         // Registering any callback is optional, but you will probably want
         // to at least register the draw callback to show a mod menu
         //BetterAPI->Callback->RegisterDrawCallback(my_mod_handle, &MyDrawCallback);
 
-        // If you have a set of global config options, make betterconsole handle
-        // save, load, and creating a gui settings tab
+        // If you have a set of global config options, you could make betterconsole
+        // take care of saving, loading, and editing these options with a gui
         //BetterAPI->Callback->RegisterConfigCallback(my_mod_handle, &MySaveLoadCallback);
 
         // Hotkey Registration happens in two steps: setting the callback and setting the hotkey
         // your mod can only have one hotkey callback, but you can request multiple hotkey
-        // entries and tell them apart by the userdata value
+        // entries and tell them apart in your callback by the "userdata" value
         //BetterAPI->Callback->RegisterHotkeyCallback(my_mod_handle, &MyHotkeyCallback); 
         //BetterAPI->Callback->RequestHotkey(my_mod_handle, "Activate Mod Feature", 0); 
         //BetterAPI->Callback->RequestHotkey(my_mod_handle, "Activate Other Feature", 1); 
@@ -65,7 +65,7 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
         // Maybe save the betterapi pointer to a global variable use elsewhere
         //API = BetterAPI;
 
-        // I often find it convenient to assign the api pointers to global variables
+        // I often find it convenient to assign individual api pointers to global variables
         // UI = BetterAPI->SimpleDraw
 
         return 0; // return 0 for success or any positive number to indicate a failure
@@ -73,8 +73,9 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
 
 */
 // Sit back and relax! The callbacks registered will be called automatically when
-// necessary. For example, lets implement that MyDrawCallback function above and
-// assume we also decided to set that UI global variable to the SimpleDraw api:
+// necessary. For example, lets implement that MyDrawCallback function from the
+// example code above and assume we also decided to set that UI global variable
+// to the SimpleDraw api and the API global variable to BetterAPI:
 /*
 
 static void MyDrawCallback(void*) {
@@ -86,10 +87,24 @@ static void MyDrawCallback(void*) {
                 counter++;
         }
 
-        char label[128];
-        snprintf(label, 128, "You Clicked the button %d times", counter);
+        // Text also supports format specifiers
+        UI->Text("You Clicked the button %d times", counter);
 
         UI->Text(label);
+}
+
+*/
+// Seems pretty easy, but while we are here may as well show a config callback
+// and assume the same API variable is still available:
+/*
+
+//any arbitrary data your mod wants to configure
+static uint32_t VendorRestockSeconds = 3600;
+
+// action is either read (config file loaded), write (config save event), or edit (show config editor)
+// the Config api is restricted to certain types, but automatically handles all actions
+void MySaveLoadCallback(ConfigAction action) {
+        API->Config->ConfigU32(action, "Vendor Restock Seconds", &VendorRestockSeconds);
 }
 
 */
@@ -112,7 +127,6 @@ static void MyDrawCallback(void*) {
 // 
 // You can always reach out to me if you have any questions or need help integrating betterapi
 // I'm almost always available in the v2 discord or nexusmods.
-//
 
 
 // Betterconsole is written in C++ but the public API is plain C99 and only includes
@@ -175,13 +189,18 @@ static void MyDrawCallback(void*) {
 //      return out_tmp;
 // }
 // 
-// Then make is a selectable list:
+// Then make it a selectable list:
 // 
 // static uint32_t selected_item = 0;
-// bool was_clicked = SimpleDraw->SelectionList(&selected_item, (const void*)data_array, 100, gametype_to_string);
+// bool was_clicked = API->SimpleDraw->SelectionList(&selected_item, (const void*)data_array, 100, gametype_to_string);
 //
-// now the user can scroll through and click on an entry in the list without
-// the UI code ever needing to know what the heck a GameType is
+// Now the user can scroll through and click on an entry in the list without
+//              the UI code ever needing to know what the heck a GameType is.
+// Note: selections lists dont always start at the first index, in our example above
+//       there were 100 items in the list, but selectionlist will only call gametype_to_string
+//       on the items that are visible, if the selection list can only show 20 items
+//       your gametype_to_string function may only be called for say index 53-73.
+//       So make sure your data is random access iterable.
 
 
 // Opaque handle for the log buffer system
@@ -215,10 +234,11 @@ typedef void (*FUNC_PTR)(void);
 
 
 // for registering your mod with betterconsole, this callback will be called every
-// frame when your mod is active in the UI and the ui is showing
+// frame when betterconsol is open and the tab for your mod is selected.
 // `imgui_context` can be ignored if using the SimpleDraw API, but if you link with
 //  imgui directly this can be used to create more complex user interfaces but you
-//  must call ImGui::SetCurrentContext() first in your draw callback
+//  must call ImGui::SetCurrentContext(imgui_context) first in your draw callback
+//  and match the version of imgui used by betterconsole exactly.
 typedef void (*DRAW_CALLBACK)(void* imgui_context);
 
 
@@ -279,31 +299,32 @@ typedef void (*CALLBACK_TABLE)(void* table_userdata, int current_row, int curren
 // This is the main api you will use to add betterconsole integration to your mod
 struct callback_api_t {
         // Register your mod with betterconsole.
-        // Almost all mods will need this to interact with betterconsole. The
-        // returned handle can be used to register additional functionality such
-        // as hotkeys or draw callbacks. This function also checks the version
-        // of the BetterConsole API your mod uses for compatibility.
+        // The returned handle can be used to register additional functionality
+        // such as hotkeys or draw callbacks.
         // 
         // `mod_name` should uniquely identify your mod and conform to the following:
         //                 - must be less than 32 characters
         //                 - must have a length of >3 characters
         //                 - must not begin or end with whitespace
+        //
+        // Almost all mods will need to use this to interact with betterconsole. 
         RegistrationHandle(*RegisterMod)(const char* mod_name);
         
 
         // Register a function to show your mod's user interface.
-        // Usually, you would utilize the SimpleDraw API to create your UI,
-        // but more advanced users may link with imgui directly and utilize
-        // the imgui context provided as the first parameter to the draw callback.
-        // If using imgui directly, you must call ImGui::SetCurrentContext() in
-        // the draw callback before using any imgui functions AND you must
-        // match the version of imgui with the version used by betterconsole.
         // 
         // `handle` is your registration handle from a previous call to RegisterMod
         // 
         // `draw_callback` will be called every frame when the following conditions are met:
         //                 - the BetterConsole UI is open
         //                 - your mod is the one in focus
+        //
+        // Usually, you would utilize the SimpleDraw API to create your UI, advanced
+        // users may link with imgui directly and utilize the imgui context provided
+        // as the first parameter to the draw callback. If using imgui directly, you
+        // must call ImGui::SetCurrentContext() in the draw callback before using 
+        // any imgui functions AND you must match the version of imgui with the 
+        // version used by betterconsole.
         void (*RegisterDrawCallback)(RegistrationHandle handle, DRAW_CALLBACK draw_callback);
 
 
@@ -329,7 +350,7 @@ struct callback_api_t {
         void (*RegisterHotkeyCallback)(RegistrationHandle handle, HOTKEY_CALLBACK hotkey_callback);
 
 
-        // Register a hotkey handler, the user configures the hotkey in the hotkeys menu
+        // Request a hotkey handler, the user configures the hotkey in the hotkeys menu
         // 
         // `handle` is the handle you created when registering your mod
         // 
@@ -338,7 +359,7 @@ struct callback_api_t {
         //               copied to an internal buffer so feel free to use a generated
         //               name via snprintf() or similar on stack allocated memory.
         // 
-        // `userdata` is optional extra data that is sent to the hotkey callback
+        // `userdata` is optional extra data that is sent to the hotkey callback.
         //            if you want to request multiple hotkeys this parameter is
         //            how you would differentiate them.
         void (*RequestHotkey)(RegistrationHandle handle, const char* hotkey_name, uintptr_t userdata);
@@ -352,6 +373,8 @@ struct config_api_t {
 
         // get the unparsed string value of a key if it exists or null
         //const char* (*ConfigRead)(const char* key_name);
+
+        // more types will be added here in the future
 };
 
 
@@ -360,6 +383,7 @@ struct config_api_t {
 struct hook_api_t {
         // Hook old_func so it is redirected to new_func
         // returns a function pointer to call old_func after the hook
+        // uses the minhook library internally
         FUNC_PTR (*HookFunction)(FUNC_PTR old_func, FUNC_PTR new_func);
 
         // Hook a vtable function for all instances of a class
@@ -391,6 +415,7 @@ struct hook_api_t {
 struct simple_draw_t {
         // Draw a separator line that fills the horizontal space
         void (*Separator)(void);
+
 
         // Draw some text, supports format specifiers
         void (*Text)(const char *fmt, ...);
@@ -428,7 +453,7 @@ struct simple_draw_t {
         // HBoxLeft region can be and overrides the `left_size` if it is smaller.
         // If you call HBoxLeft, you must also call HBoxRight and HBoxEnd
         // HBox and VBox regions can be nested for more complex layouts but
-        // are more performance intensive tham most other SimpleDraw functions.
+        // are more performance intensive than most other SimpleDraw functions.
         void (*HBoxLeft)(float left_size, float min_size_em);
 
 
@@ -507,17 +532,20 @@ struct simple_draw_t {
         void (*TabBar)(const char* const* const headers, uint32_t header_count, int* state);
 
 
-        // draw buttons in a row, similar to a tookbar
+        // draw buttons in a row, similar to a toolbar
         // returns -1 if no button was pressed this frame (common case)
         // otherwise returns the index of the button pressed this frame
         // `labels` is an array of strings that are the button labels
         // `label_count` is the number of strings in the `labels` array
         //               this is assumed to be the count of buttons
+        // if there is not enough horizontal space available the buttons
+        // out of bounds will wrap to the next row.
         int (*ButtonBar)(const char* const* const labels, uint32_t label_count);
 
 
         // show a tooltip marker that looks like "(?)"
         // when the user hovers over the marker `text` will be shown
+        // in a little popup
         void (*Tip)(const char* text);
 
 
@@ -573,6 +601,9 @@ struct console_api_t {
         //       has finished loading otherwise it freezes waiting
         //       for the console to be ready (if your compiling shaders
         //       the game could seem frozen for several minutes)
+        // there should be a way to know when the console is ready, but
+        // as i dont link with sfse, addresslibrary, commonlibsf or anything
+        // i have to figure it out myself.
         void (*RunCommand)(char* command);
 };
 
@@ -720,21 +751,17 @@ typedef struct SFSEMessagingInterface_t {
 #define DLLEXPORT __declspec(dllexport)
 #endif // __cplusplus
 static int OnBetterConsoleLoad(const struct better_api_t* betterapi);
-// maybe rename this in the next version?
-// I really missed the opportunity to report compatibility issues in the return value
-DLLEXPORT void BetterConsoleReceiver(const struct better_api_t* api) {
 #if BETTERAPI_VERSION == 1
-        if (!api) return;
-        uint64_t version = *(const uint64_t*)api; // you dont see code like this very often
-        if ((version & 0xFFFFFFFF) < 0xFFFF) return; // the next api version will be better
-        int retval = OnBetterConsoleLoad(api);
+DLLEXPORT void BetterConsoleReceiver(const struct better_api_t* api) {
+        OnBetterConsoleLoad(api);
+}
 #else
-        //TODO: api version check for the next version
+#define MAKE_NAME(NAME) NAME##BETTERCONSOLE_VERSION
+DLLEXPORT int MAKE_NAME(BetterConsoleReceiver) {
         if (api->betterapi_version == BETTERAPI_VERSION) {
                 return OnBetterConsoleLoad(api);
         }
-        
         return -1; //error, plugin not compatible
-#endif
 }
+#endif // BETTERAPI_VERSION == 1
 #endif // BETTERAPI_IMPLEMENTATION
