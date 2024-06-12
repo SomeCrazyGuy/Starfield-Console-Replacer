@@ -88,11 +88,6 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
 // simple enough. Since almost every programming language has some type
 // of C compatible foreign function interface, this allows you to write
 // mods in almost any programming language albeit with some challenges.
-#ifdef __cplusplus
-#define DLLEXPORT extern "C" __declspec(dllexport)
-#else
-#define DLLEXPORT __declspec(dllexport)
-#endif // __cplusplus
 #include <stdint.h> 
 #include <stdbool.h>
 
@@ -122,13 +117,13 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
 // of the api is as easy as dropping in the new betterapi.h into your build
 // and fixing anything the compiler complains about (if anything).
 //
-// Recommendation: always use the latest betterapi header in your build as
-//                 long as the BETTERAPI_VERSION is compatible with the published
+// Recommendation: always use the latest betterapi.h file from github in your build
+//                 as long as the BETTERAPI_VERSION is compatible with the published
 //                 version of betterconsole on nexusmods - sometimes small hacks
 //                 or fixes are put here to fix issues in the published mod
 //                 between releases. Likewise, when the published version of
 //                 betterconsole changes, you should update betterapi.h and
-//                 recompile your mod to fix any subtle issues that may arise.
+//                 recompile your mod to fix any issues that may arise.
 #define BETTERAPI_VERSION 1
 
 
@@ -139,13 +134,6 @@ static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
 // writing "betterapi->structure->function" all over the place.
 struct better_api_t;
 
-
-// Forward declaration of init function, call this first in your BetterConsoleReceiver
-// function to initialize the betterapi system before using any of the api.
-// this allows me to do some quick hacks, extra checks, or other fixes if needed
-// without needing to update the main mod itself
-#define BETTERAPI_INIT(betterapi) do { if (!betterapi_check_compatibility((betterapi))) return; } while(0)
-extern bool betterapi_check_compatibility(const struct better_api_t* betterapi);
 
 
 // Note: this API is not thread safe,
@@ -582,6 +570,7 @@ typedef struct better_api_t {
 // plug and play sfse plugin with no brain required:
 // 
 // #define BETTERAPI_ENABLE_SFSE_MINIMAL
+// #define BETTERAPI_IMPLEMENTATION
 // #include "betterapi.h"
 
 // if you want your dll to be loadable with sfse you need to export two symbols:
@@ -685,6 +674,11 @@ typedef struct SFSEMessagingInterface_t {
 #endif
 
 #ifdef BETTERAPI_IMPLEMENTATION
+#ifdef __cplusplus
+#define DLLEXPORT extern "C" __declspec(dllexport)
+#else
+#define DLLEXPORT __declspec(dllexport)
+#endif // __cplusplus
 static int OnBetterConsoleLoad(const struct better_api_t* betterapi);
 // maybe rename this in the next version?
 // I really missed the opportunity to report compatibility issues in the return value
