@@ -401,10 +401,6 @@ static void SetupModMenu() {
         ImGui::StyleColorsDark();
         DEBUG("ImGui one time init completed!");
 
-        // The console part of better console is now minimally coupled to the mod menu
-        DEBUG("Console setup - crashing here is AOB issue");
-        setup_console(&API);
-
         // Gather all my friends!
         BroadcastBetterAPIMessage(&API);
         ASSERT(betterapi_load_selftest == true);
@@ -415,8 +411,16 @@ static void SetupModMenu() {
 
 extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface*) {}
 
-extern "C" __declspec(dllexport) void BetterConsoleReceiver(const struct better_api_t* api) {
-        BETTERAPI_INIT(api);
+
+static int OnBetterConsoleLoad(const struct better_api_t* api) {
+        ASSERT(api == &API && "Betterconsole already loaded?? Do you have multiple versions of BetterConsole installed?");
+        
+        // The console part of better console is now minimally coupled to the mod menu
+        DEBUG("Console setup - crashing here is AOB issue");
+        setup_console(api);
+
+        //should the hotkeys code be an internal plugin too?
+
         const auto handle = api->Callback->RegisterMod("(internal)");
         api->Callback->RegisterConfigCallback(handle, Callback_Config);
         api->Callback->RegisterHotkeyCallback(handle, OnHotheyActivate);
@@ -426,6 +430,7 @@ extern "C" __declspec(dllexport) void BetterConsoleReceiver(const struct better_
         
         betterapi_load_selftest = true;
         DEBUG("Self Test Complete");
+        return 0;
 }
 
 extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
@@ -522,7 +527,7 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         static bool alt = false;
 
         if (uMsg == WM_KEYDOWN) {
-                HotkeyReceiveKeypress(wParam);
+                HotkeyReceiveKeypress((unsigned)(wParam & 0xFF));
         }
 
         if (should_show_ui) {

@@ -2,45 +2,67 @@
 #define BETTERAPI_API_H
 
 
-// Integrate betterconsole in your mod in 7 easy steps:
+// Integrate betterconsole in your mod in 3 easy steps:
 // 
 // Step 1) Include "betterapi.h" anywhere you want to use the api
 // 
 // 
-// Step 2) In only one translation unit (.cpp file) define BETTERAPI_IMPLEMENTATION
-//         before including betterapi.h to generate necessary glue code:
+// Step 2) In only one translation unit (.c or .cpp file) define 
+//         "BETTERAPI_IMPLEMENTATION" before including betterapi.h
+//         this will generate magic glue code that makes it all work,
+//         then you can write the "OnBetterConsoleLoad" function.
+//         You will probably just copy/paste this into a file:
+/*
+
+// BETTERAPI_IMPLEMENTATION can only be defined in one file
+// and must be defined before including betterapi.h in that one file
+#define BETTERAPI_IMPLEMENTATION
+
+// but you can include betterapi.h in any number of files
+#include "betterapi.h"
+
+// If betterconsole is installed and your mod is compatible then
+// this function will get called *magically* even though its static
+static int OnBetterConsoleLoad(const struct better_api_t* BetterAPI) {
+        
+        // First register your mod with betterconsole by providing a mod name
+        // you could save the handle for later use, but most of the time you can
+        // just register the callback you want upfront and then forget about the handle
+        RegistrationHandle my_mod_handle = BetterAPI->Callback->RegisterMod("My Mod Name");
+
+        // Registering any callback is optional, but you will probably want
+        // to at least register the draw callback to show a mod menu
+        //BetterAPI->Callback->RegisterDrawCallback(my_mod_handle, &MyDrawCallback);
+
+        // If you have a set of global config options, make betterconsole handle
+        // save, load, and creating a gui settings tab
+        //BetterAPI->Callback->RegisterConfigCallback(my_mod_handle, &MySaveLoadCallback);
+
+        // Hotkey Registration happens in two steps: setting the callback and setting the hotkey
+        // your mod can only have one hotkey callback, but you can request multiple hotkey
+        // entries and tell them apart by the userdata value
+        //BetterAPI->Callback->RegisterHotkeyCallback(my_mod_handle, &MyHotkeyCallback); 
+        //BetterAPI->Callback->RequestHotkey(my_mod_handle, "Activate Mod Feature", 0); 
+        //BetterAPI->Callback->RequestHotkey(my_mod_handle, "Activate Other Feature", 1); 
+        //BetterAPI->Callback->RequestHotkey(my_mod_handle, "Activate Third Feature", 2); 
+
+        // Maybe save the betterapi pointer to a global variable use elsewhere
+        //API = BetterAPI;
+
+        // I find it convenient to even unwrap the internal api pointers and assign them to globals
+        // UI = BetterAPI->SimpleDraw
+
+        return 0; // return 0 for success or any positive number to indicate a failure
+}
+
+*/
 // 
-//         #define BETTERAPI_IMPLEMENTATION // only do this in one file
-//         #include "betterapi.h"           // now everything will work
-// 
-// 
-// Step 3) Implement the following function (and save the betterapi pointer for use later):
-// 
-//         DLLEXPORT void BetterConsoleReceiver(const struct better_api_t* betterapi);
-// 
-// 
-// Step 4) Before using the betterconsole api, you will need to check compatibility
-//         with your mod. You should call BETTERAPI_INIT() with the
-//         `betterapi` pointer received from your BetterConsoleReceiver fuction:
-// 
-//         BETTERAPI_INIT(betterapi); //this should be done first in BetterConsoleReceiver
-// 
-// 
-// Step 5) Register the name of your plugin with betterconsole using the callback api.
-// 
-//         my_mod_handle = betterapi->Callback->RegisterMod("My Mod Name");
-// 
-// 
-// Step 6) Register additional callbacks for any functionality you want:
-// 
-//         betterapi->Callback->RegisterDrawCallback(my_mod_handle, &my_draw_callback);
-//
-// 
-// Step 7) Enjoy! betterapi integration is a soft dependency so if a user doesn't have
-//         or want betterconsole installed, they can still use your mod just without the 
+// Step 3) Enjoy! betterapi integration is a soft dependency so if a user doesn't have
+//         or want betterconsole installed, or betterconsole updates and your mod is no
+//         longer compatible then your mod just works the way it would without the
 //         betterconsole features and api. If your mod can function without betterconsole
-//         you dont need to do any additional work, the BetterConsoleReceiver just wont
-//         be called.
+//         you dont need to do any additional work, the OnBetterConsoleLoad function
+//         just wont be called.
 //
 //
 // Bonus Step: If you are writing an asi mod or trying to port a cheat engine table,
@@ -533,6 +555,11 @@ struct console_api_t {
 // this helps with forwards compatibility and i wont need to
 // update the BETTERAPI_VERSION as often.
 typedef struct better_api_t {
+#if BETTERAPI_VERSION > 1
+        //I don't know why I didnt think of this before
+        const uint64_t version_info;
+        //maybe add some more fields before official v2
+#endif
         const struct hook_api_t* Hook;
         const struct log_buffer_api_t* LogBuffer;
         const struct simple_draw_t* SimpleDraw;
@@ -541,19 +568,6 @@ typedef struct better_api_t {
         const struct std_api_t* Stdlib;
         const struct console_api_t* Console;
 } BetterAPI;
-
-
-// in the next version of betterapi we will add a betterapi_version_t struct
-// this struct will be the first one in the betterapi struct and with how 
-// structs work you could cast the betterapi struct to a betterapi_version_t**
-// and will have a non-breaking api:
-struct betterapi_version_t {
-        // this should be the same as BETTERAPI_VERSION
-        uint64_t betterapi_version;
-
-        uintptr_t reserved[15];
-};
-
 #endif // !BETTERAPI_API_H
 
 
@@ -671,24 +685,22 @@ typedef struct SFSEMessagingInterface_t {
 #endif
 
 #ifdef BETTERAPI_IMPLEMENTATION
-extern bool betterapi_check_compatibility(const struct better_api_t* betterapi) {
-        // I already made an API oopsie in the first version of the api,
-        // the released betterconsole 1.3.1 does not perform api version checking
-        // and even if it did, calling betterapi->Callback->RegisterMod() might not
-        // work as intended if the api is incompatible (duh). How am I going to resolve this?
-        // 
-        // The next version of the api will put a never changing api as the first 
-        // pointer in the betterapi struct. Currently this is used for the hook_api_t*
-        // so we need to imagine if this was the future...
-        const struct betterapi_version_t* const version = *(const struct betterapi_version_t* const * const)betterapi;
-
-        // this check will specifically allow betterconsole 1.3.1 but not any
-        // future breaking api change, once we create a version struct where the hookapi goes
-        // this will fail, assuming the pointers will be > 65536 (they should be)
-        if (((uintptr_t)version > 65536) && (version->betterapi_version < 65536)) {
-                return false;
+static int OnBetterConsoleLoad(const struct better_api_t* betterapi);
+// maybe rename this in the next version?
+// I really missed the opportunity to report compatibility issues in the return value
+DLLEXPORT void BetterConsoleReceiver(const struct better_api_t* api) {
+#if BETTERAPI_VERSION == 1
+        if (!api) return;
+        uint64_t version = *(const uint64_t*)api; // you dont see code like this very often
+        if ((version & 0xFFFFFFFF) < 0xFFFF) return; // the next api version will be better
+        int retval = OnBetterConsoleLoad(api);
+#else
+        //TODO: api version check for the next version
+        if (api->betterapi_version == BETTERAPI_VERSION) {
+                return OnBetterConsoleLoad(api);
         }
-
-        return true;
+        
+        return -1; //error, plugin not compatible
+#endif
 }
 #endif // BETTERAPI_IMPLEMENTATION
