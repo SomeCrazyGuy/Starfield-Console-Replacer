@@ -102,7 +102,7 @@ static void MyDrawCallback(void*) {
 static uint32_t VendorRestockSeconds = 3600;
 
 // action is either read (config file loaded), write (config save event), or edit (show config editor)
-// the Config api is restricted to certain types, but automatically handles all actions
+// the Config api only supports certain types, but automatically handles all 3 actions
 void MySaveLoadCallback(ConfigAction action) {
         API->Config->ConfigU32(action, "Vendor Restock Seconds", &VendorRestockSeconds);
 }
@@ -141,6 +141,27 @@ void MySaveLoadCallback(ConfigAction action) {
 #include <stdbool.h>
 
 
+// Sometimes betterconsole updates and supports new features and APIs without
+// breaking backwards compatibility with older versions. By default betterapi
+// uses the most backwards compatible options which are only the features that
+// all versions of BETTERAPI_VERSION support. When new features are added, a new
+// feature level is defined below. if you need a more up-to-date feature set
+// and are willing to break compatibility with older versions of betterconsole
+// then you can define BETTERAPI_FEATURE_LEVEL before including betterapi.h
+// BETTERAPI_FEATURE_LEVEL is defined as an integer constant that represents a
+// release date for betterconsole on nexusmods. usually you would want to support
+// at least one previous version of betterconsole in case a mod collection that
+// includes betterconsole has not yet been updated.
+#if 0
+// these are provided for easy copy-paste
+#define BETTERAPI_FEATURE_LEVEL_1_3_1 0
+#endif
+#ifndef BETTERAPI_FEATURE_LEVEL
+#define BETTERAPI_FEATURE_LEVEL 0
+#endif
+
+
+
 // You might see the use of BETTERAPI_DEVELOPMENT_FEATURES in the code below.
 // these are features that will be in the next version of betterconsole but
 // not part of the current release on nexusmods.
@@ -149,12 +170,17 @@ void MySaveLoadCallback(ConfigAction action) {
 // with the version of betterconsole that everyone is using.
 #ifdef BETTERAPI_DEVELOPMENT_FEATURES
 #pragma message ("BETTERAPI_DEVELOPMENT_FEATURES is defined, any plugin using the api will not be compatible the nexusmods release of betterconsole.")
+#define BETTERAPI_FEATURE_LEVEL 99999999
 #endif // BETTERAPI_DEVELOPMENT_FEATURES
 
 
+
+
+
+
 //           A note about thread safety
-// There is no thread safety all of the betterapi functions are operating within
-// the game's idxgiswapchain::present function as the game is trying submit a 
+// There is no thread safety! All of the betterapi functions are operating within
+// the game's idxgiswapchain::present call as the game is trying submit a 
 // frame to the gpu. Do not use any of these apis from a separate thread unless
 // it is explicitly marked as safe to do so and please keep it quick - we don't
 // want to slow down the game. I will add an api for a separate task thread to
@@ -229,16 +255,19 @@ typedef enum ConfigAction {
 
 // while many compilers let you cast a function pointer to a void*
 // the C standard only lets you cast a function pointer to another
-// function pointer. Whatever, but this does help document the API better
+// function pointer. This does help document the API better though.
 typedef void (*FUNC_PTR)(void);
 
 
-// for registering your mod with betterconsole, this callback will be called every
-// frame when betterconsol is open and the tab for your mod is selected.
+// To show a GUI you must register a draw callback with this signature.
+//
 // `imgui_context` can be ignored if using the SimpleDraw API, but if you link with
-//  imgui directly this can be used to create more complex user interfaces but you
-//  must call ImGui::SetCurrentContext(imgui_context) first in your draw callback
-//  and match the version of imgui used by betterconsole exactly.
+//    imgui directly this can be used to create more complex user interfaces but you
+//    must call ImGui::SetCurrentContext(imgui_context) first in your draw callback
+//    and match the version of imgui used by betterconsole exactly.
+// 
+// Note: this callback will be called every frame when betterconsole is open and
+//       the tab for your mod is selected.
 typedef void (*DRAW_CALLBACK)(void* imgui_context);
 
 
@@ -255,9 +284,9 @@ typedef void (*CONFIG_CALLBACK)(ConfigAction read_write_or_edit);
 // This is a function called when the user presses a hotkey combination that
 // matches the hotkey set for your plugin. Setting a hotkey is done by the user
 // in the hotkeys menu. Hotkeys are saved automatically in the settings registry
-// so a set hotkey is preserved across sessions. Only one hotkey callback per mod
-// can be registered, but you can request hotkeys multiple times with different
-// user data.
+// so a set hotkey combo is preserved across sessions. Only one hotkey callback
+// per mod can be registered, but you can request hotkeys multiple times with
+// different user data.
 // 
 // `userdata` is any arbitrary data that you want to pass to the callback usually
 //            to help identify the hotkey if multiple hotkeys are requested
@@ -363,6 +392,8 @@ struct callback_api_t {
         //            if you want to request multiple hotkeys this parameter is
         //            how you would differentiate them.
         void (*RequestHotkey)(RegistrationHandle handle, const char* hotkey_name, uintptr_t userdata);
+
+        
 };
 
 
@@ -551,6 +582,19 @@ struct simple_draw_t {
 
         // place multiple simpledraw elements on the same line
         void (*SameLine)();
+
+#ifdef BETTERAPI_DEVELOPMENT_FEATURES
+        // Draw a radiobutton, returns true if the button was selected this frame
+        // 
+        // `selection_group` is the group this radiobutton belongs to.
+        //                   use the address of a static variable here.
+        //                   the value is the currently selected radiobutton.
+        // 
+        // `current_id`      the id of the current button in a group.
+        //                   set this to 0 every frame before drawing the 
+        //                   first button in a group. no need for a static variable
+        bool (*RadioButton)(const char* text, uint32_t* selection_group, uint32_t* current_id);
+#endif
 };
 
 
