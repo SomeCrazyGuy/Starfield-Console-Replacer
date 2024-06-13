@@ -252,6 +252,21 @@ static void simple_sameline() {
 }
 
 
+// I find it strange that imgui didn't go with this pattern for grouping radiobuttons
+// Also, text on the left or right of the arguments list?
+// left matches other apis, right means the active and current ids line up. hmm....
+static bool simple_radio(const char* text, uint32_t* group_id, uint32_t* button_id) {
+        const auto cur = *button_id;
+        const bool active = (*group_id == cur);
+        const bool pressed = ImGui::RadioButton(text, active);
+        if (pressed) {
+                *group_id = cur;
+        }
+        *button_id = cur + 1;
+        return pressed;
+}
+
+
 static constexpr simple_draw_t SimpleDraw {
         simple_separator,
         simple_text,
@@ -273,7 +288,8 @@ static constexpr simple_draw_t SimpleDraw {
         simple_tab_bar,
         simple_button_bar,
         simple_tip,
-        simple_sameline
+        simple_sameline,
+        simple_radio
 };
 
 

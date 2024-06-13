@@ -56,9 +56,9 @@ constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 11, 36);
 //---------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------
 struct ModMenuSettings {
-        uint32_t HotkeyModifier = 0;
-        uint32_t ConsoleHotkey = 112; //VK_F1
         uint32_t FontScaleOverride = 0;
+        uint32_t CreateSwapChainForHwndSoft = 0;
+        uint32_t SwapchainPresentHard = 0;
 };
 
 extern const ModMenuSettings* GetSettings();

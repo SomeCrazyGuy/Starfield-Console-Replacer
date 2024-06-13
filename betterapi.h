@@ -89,8 +89,6 @@ static void MyDrawCallback(void*) {
 
         // Text also supports format specifiers
         UI->Text("You Clicked the button %d times", counter);
-
-        UI->Text(label);
 }
 
 */
@@ -170,6 +168,7 @@ void MySaveLoadCallback(ConfigAction action) {
 // with the version of betterconsole that everyone is using.
 #ifdef BETTERAPI_DEVELOPMENT_FEATURES
 #pragma message ("BETTERAPI_DEVELOPMENT_FEATURES is defined, any plugin using the api will not be compatible the nexusmods release of betterconsole.")
+#undef BETTERAPI_FEATURE_LEVEL
 #define BETTERAPI_FEATURE_LEVEL 99999999
 #endif // BETTERAPI_DEVELOPMENT_FEATURES
 

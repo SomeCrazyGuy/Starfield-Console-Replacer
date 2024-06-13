@@ -99,6 +99,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile Include="imgui\imgui_demo.cpp" />
     <ClCompile Include="imgui\imgui_draw.cpp" />
     <ClCompile Include="imgui\imgui_impl_dx11.cpp" />
+    <ClCompile Include="imgui\imgui_impl_dx12.cpp" />
     <ClCompile Include="imgui\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui\imgui_tables.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
@@ -106,6 +107,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile Include="src\callback.cpp" />
     <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\d3d11on12ui.cpp" />
+    <ClCompile Include="src\dx12ui.cpp" />
     <ClCompile Include="src\fake_vcruntime140_1.cpp" />
     <ClCompile Include="src\gui.cpp" />
     <ClCompile Include="src\hook_api.cpp" />
@@ -121,6 +123,8 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="betterapi.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
+    <ClInclude Include="imgui\imgui_impl_dx11.h" />
+    <ClInclude Include="imgui\imgui_impl_dx12.h" />
     <ClInclude Include="imgui\imgui_impl_win32.h" />
     <ClInclude Include="imgui\imgui_internal.h" />
     <ClInclude Include="imgui\imstb_rectpack.h" />

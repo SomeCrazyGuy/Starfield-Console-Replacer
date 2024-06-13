@@ -295,11 +295,19 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
         
         static bool once = false;
         if (!once) {
-                OLD_Present = (decltype(OLD_Present))API.Hook->HookVirtualTable(
-                        *ppSwapChain,
-                        Present,
-                        (FUNC_PTR)FAKE_Present
-                );
+                if (GetSettings()->SwapchainPresentHard) {
+                        // hard hook breaks rivatuner but emulates old behavior
+                        FUNC_PTR* fp = *(FUNC_PTR**)*ppSwapChain;
+                        DEBUG("HookFunction: IDXGISwapChain::Present");
+                        OLD_Present = (decltype(OLD_Present))API.Hook->HookFunction(fp[Present], (FUNC_PTR)FAKE_Present);
+                }
+                else {
+                        OLD_Present = (decltype(OLD_Present))API.Hook->HookVirtualTable(
+                                *ppSwapChain,
+                                Present,
+                                (FUNC_PTR)FAKE_Present
+                        );
+                }
                 DEBUG("Hooked Present, OLD_Present: %p, NEW_Present: %p", OLD_Present, FAKE_Present);
                 once = true;
         }
@@ -338,11 +346,23 @@ static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactor
                         CreateSwapChainForHwnd
                 };
 
-                // Using a stronger hook here because otherwise the steam overlay will not function
-                // not sure why a vmt hook doesnt work here, steam checks and rejects?
-                FUNC_PTR* fp = *(FUNC_PTR**)*ppFactory;
-                DEBUG("HookFunction: CreateSwapChainForHwnd");
-                OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookFunction(fp[CreateSwapChainForHwnd], (FUNC_PTR)FAKE_CreateSwapChainForHwnd);
+                
+                if (GetSettings()->CreateSwapChainForHwndSoft) {
+                        // Soft hook breaks steam overlay, but emulates old behavior
+                        OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))
+                                API.Hook->HookVirtualTable(
+                                        *ppFactory,
+                                        CreateSwapChainForHwnd,
+                                        (FUNC_PTR)FAKE_CreateSwapChainForHwnd
+                                );
+                }
+                else {
+                        // Using a stronger hook here because otherwise the steam overlay will not function
+                        // not sure why a vmt hook doesnt work here, steam checks and rejects?
+                        FUNC_PTR* fp = *(FUNC_PTR**)*ppFactory;
+                        DEBUG("HookFunction: CreateSwapChainForHwnd");
+                        OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookFunction(fp[CreateSwapChainForHwnd], (FUNC_PTR)FAKE_CreateSwapChainForHwnd);
+                }
         }
 
         return ret;
@@ -356,12 +376,25 @@ static void Callback_Config(ConfigAction action) {
         if (action == ConfigAction_Write) {
                 HotkeySaveSettings();
         }
+        if (action != ConfigAction_Edit) {
+                c->ConfigU32(action, "CreateSwapChainForHwndSoft", &s->CreateSwapChainForHwndSoft);
+                c->ConfigU32(action, "SwapchainPresentHard", &s->SwapchainPresentHard);
+        }
+        else {
+                auto UI = API.SimpleDraw;
+                UI->Text("Renderer quirks, you must restart game to apply");
+                UI->Separator();
+                UI->Text("CreateSwapChainForHwnd hook mode:");
+                UI->Checkbox("Use soft hook", (bool*)&s->CreateSwapChainForHwndSoft);
+                UI->Text("SwapchainPresent hook mode:");
+                UI->Checkbox("Use hard hook", (bool*)&s->SwapchainPresentHard);
+        }
 }
 
 
 static void SetupModMenu() {
         // use the directory of the betterconsole dll as the place to put other files
-        // NOTE: this needs to be dome before any other file (logfile/config/conaole history) is opened
+        // NOTE: this needs to be done before any other file (logfile/config/console history) is opened
         GetModuleFileNameA(self_module_handle, DLL_DIR, MAX_PATH);
         char* n = DLL_DIR;
         while (*n) ++n;

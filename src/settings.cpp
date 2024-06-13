@@ -48,6 +48,15 @@ static uint64_t hash_fnv1a(const char* str) {
         return ret;
 }
 
+
+// I'm actually very happy with the config loader
+// the only improvement would be memory mapping it
+// but its apparently not possible in win32 to extend the
+// memory map beyond the end of the file using a read only
+// file handle and copy on write flags. Also a problem with
+// memory mapping is that i cant open another handle to the
+// and dump all changed settings without a permission denied
+// maybe file_share_delete? first problem is showstopper though
 extern ConfigFile* ConfigLoadFile(const char* filename) {
         DEBUG("Reading config file: '%s'", filename);
 
@@ -92,20 +101,18 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
         // a settings file consists of "key ! value" pairs separated by newlines, using '!' makes the parser more efficient
         // keys are composed of 2 parts: "mod_name : key_name"
         // this allows different plugins to have the same key_name without collisions
-        // avoid non-printing characters in keys, while the parser doesn't care, the file is intended to be plain utf8
-        // newline characters in keys is restricted (will cause parser to ignore)
-        // whitespace characters at the beginning and end of keys will be trimmed
-        // keys cannot start with the '#' character (parser will treat it as a comment and ignore it)
-        // whitespace is trimmed from the left of mod_name and the right of key_name (the join with ':' is assumed to be correct)
+        // whitespace is trimmed from the left of mod_name and the right of key_name
+        // the settings file is utf8 encoded, should be plain text, and should be human readable / editable
+        // therefore, you should avoid non-printing characters in keys and values even if while the parser doesn't care
+        // newline characters in keys is restricted (will cause parser to ignore line)
+        // any line where the first non-whitespace character is '#' is treated as a comment and is ignored
+        // therefore keys cannot start with the '#' character (parser will treat it as a comment and ignore it)
         // text in values is quoted and escaped, so newline restrictions and whitespace trimming does not effect values
         // duplicate keys in the settings file have no guarantees on which one is retrieved during lookup
-        // settings are only saved if they are read, so old settings self-clean from the registry
-        // therefore, your plugin should load all settings it uses instead of trying to lazy load settings
         // settings files have a size limit of 4 gigabytes, I truely hope this limit is never reached
-        // the settings file is utf8 encoded, should be plain text, and is human readable / editable
-        // memory consumption for the settings file is the size of the file + (16 bytes * number_of_newlines) + a constant overhead
-        // the settings file buffer is never freed for the life of the application, its always valid to try to read a setting
-        // any line where the first non-whitespace character is '#' is treated as a comment and is ignored
+        // memory consumption for the settings is the aligned size of the file + (16 bytes * number_of_keys) + a small overhead
+        // the settings file buffer is never freed for the life of the application, this means its always valid to
+        // read a setting and allows you to revert settings.
 
 
         enum token_type : unsigned char {
@@ -116,14 +123,14 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
         };
 
         // lookup table for the parser
-        // the only characters the parser cares about are NULL '\0', newline '\n', and the exclaimation mark '!'
+        // the only characters the parser cares about are NULL '\0', newline '\n', and exclaimation mark '!'
         // using some smart (or cursed) programming, the lookup table for the parser can be significantly
         // smaller than the 256 possible bytes it could encounter
         // the following parser state is only 64 bytes and should fit into a single cpu cache line
         unsigned char lookup[40];
         unsigned char* f = ret->file_buffer - 1; //yep, this is initialized to a value outside the array
         unsigned char* expos = nullptr; //the position of the exclaimation mark on the current line
-        unsigned char* lastlf = f; //also intentionally initialized to a value outside the array
+        unsigned char* lastlf = f; //last line feed '\n', initialization out of bounds also intentional
         memset(lookup, TT_NONE, sizeof(lookup));
         lookup[0] = TT_NULL;
         lookup['\n'] = TT_NEWLINE;
@@ -137,12 +144,14 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
                 // the most common case (>80% of standard utf8 text)
                 // since the only characters the parser cares about are <= '!'
                 // this tight loop in the first branch makes the predictor very happy
+                // you might wonder why '!' is the most efficient character for this
+                // at 0x21 its the first non-whitespace printable utf8 character
                 if (c > '!') continue;
 
-                const auto t = lookup[c];
+                const auto t = lookup[c]; //we know c must be in bounds of the array
 
-                // the next most common case would be space ' ' or another
-                // character the parser doesnt need to care about
+                // the next most common case would be space ' ' (>80% of remaining characters)
+                // or another character the parser does not need to care about
                 if (!t) continue;
 
                 // we are down to only 3 possible options: TT_NULL, TT_NEWLINE, and TT_EXCLAIM
@@ -156,7 +165,7 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
                         // we also know if an exclaimation was found `expos`
                         // we know where the current line ends `f`
                         // we can determine where the keys and values are using only this info
-                        unsigned char* keypos = lastlf + 1;
+                        unsigned char* keypos = lastlf;
                         lastlf = f;
 
                         if (!expos) continue; // no '!'? then there can't be a key!value pair 
@@ -165,7 +174,11 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
                         expos = nullptr;
 
                         //step 1: advance keypos until the first non-whitespace character (left-trim)
-                        while (::isspace(*keypos)) keypos;
+                        do {
+                                // on first iteration, unconditionally advance past keypos (lastlf)
+                                // which we know cannot be part of this line's key
+                                ++keypos;
+                        } while (::isspace(*keypos));
 
                         if (keypos == valpos) continue; //key was empty
 
@@ -213,12 +226,10 @@ extern ConfigFile* ConfigLoadFile(const char* filename) {
                         // for a parser in another thread to transform the value in-place
                         // values are escaped or otherwise encoded in the config file
                         // and we could unescape or decode it while this thread continues to parse
-                        // the config file, heck we could evem perform the fnv1a hash on the
+                        // the config file, heck we could even perform the fnv1a hash on the
                         // other thread too, which would very evenly split the amount of work
                         // nearly in half, im not sure any other parser out there could do that
-                        // due to our format being so simple.
-                        // but for now, we just leave it as-is
-
+                        // due to our format being so simple. but for now, we just leave it as-is
                         continue;
                 }
 
@@ -329,7 +340,6 @@ extern const struct config_api_t* GetConfigAPI() {
 }
 
 
-
 extern void LoadSettingsRegistry() {
         ASSERT(BetterConsoleConfig == nullptr && "BetterConsoleConfig is already loaded");
         BetterConsoleConfig = ConfigLoadFile(SETTINGS_REGISTRY_PATH);
@@ -374,6 +384,9 @@ extern void draw_settings_tab() {
 
         static uint32_t selection = 0;
         SimpleDraw->HBoxLeft(0.3, 12.f);
+        if (SimpleDraw->Button("Save Configuration")) {
+                SaveSettingsRegistry(); //TODO: this doesnt get the hotkeys
+        }
         SimpleDraw->SelectionList(&selection, config, num_config, to_string);
         SimpleDraw->HBoxRight();
         if (selection >= 0) {
