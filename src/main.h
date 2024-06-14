@@ -59,6 +59,7 @@ struct ModMenuSettings {
         uint32_t FontScaleOverride = 0;
         uint32_t CreateSwapChainForHwndSoft = 0;
         uint32_t SwapchainPresentHard = 0;
+        uint32_t UseOldRenderer = 0;
 };
 
 extern const ModMenuSettings* GetSettings();

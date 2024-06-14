@@ -136,6 +136,7 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="src\callback.h" />
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\d3d11on12ui.h" />
+    <ClInclude Include="src\dx12ui.h" />
     <ClInclude Include="src\gui.h" />
     <ClInclude Include="src\gui_interface.h" />
     <ClInclude Include="src\hook_api.h" />

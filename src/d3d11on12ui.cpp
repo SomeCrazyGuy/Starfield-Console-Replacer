@@ -30,9 +30,11 @@ static ID3D11On12Device* g_d3d11on12device{ nullptr };
 static unsigned g_buffercount{ 0 };
 static bool g_initialized = false;
 
+#define COM_ERROR(ERR) do { if ((ERR) != S_OK){ _com_error err(hr); DEBUG("ERROR: %s", err.ErrorMessage()); } ASSERT(hr == S_OK); } while (0)
+
 
 // NOTE: the other code doesnt abort on hr != S_OK
-extern void UI_Initialize(void* dx12_swapchain, void* dx12_commandqueue) {
+extern void DX11_Initialize(void* dx12_swapchain, void* dx12_commandqueue) {
         ASSERT(g_initialized == false);
         const auto swapchain = (IDXGISwapChain*)dx12_swapchain;
         const auto dx12queue = (ID3D12CommandQueue*)dx12_commandqueue;
@@ -42,54 +44,30 @@ extern void UI_Initialize(void* dx12_swapchain, void* dx12_commandqueue) {
         HRESULT hr;
         ID3D12Device* dx12device;
         hr = swapchain->GetDevice(IID_PPV_ARGS(&dx12device));
-        if (hr != S_OK) {
-                _com_error err(hr);
-                DEBUG("ERROR: %s", err.ErrorMessage());
-        }
-        ASSERT(hr == S_OK);
+        COM_ERROR(hr);
         
         // Get the info from the swapchain to get the number of frame buffers
         DXGI_SWAP_CHAIN_DESC desc;
         hr = swapchain->GetDesc(&desc);
-        if (hr != S_OK) {
-                _com_error err(hr);
-                DEBUG("ERROR: %s", err.ErrorMessage());
-        }
-        ASSERT(hr == S_OK);
+        COM_ERROR(hr);
 
         g_buffercount = desc.BufferCount;
 
         // Create the dx11 device from the dx12 device and command queue
         const auto feature_level = D3D_FEATURE_LEVEL_11_0;
         hr = D3D11On12CreateDevice(dx12device, 0, &feature_level, 1, (IUnknown* const*)&dx12queue, 1, 0, &g_d3d11device, &g_d3d11context, nullptr);
-        if (hr != S_OK) {
-                _com_error err(hr);
-                DEBUG("ERROR: %s", err.ErrorMessage());
-        }
-        ASSERT(hr == S_OK);
+        COM_ERROR(hr);
 
         // verify the device
         hr = g_d3d11device->QueryInterface(IID_PPV_ARGS(&g_d3d11on12device));
-        if (hr != S_OK) {
-                _com_error err(hr);
-                DEBUG("ERROR: %s", err.ErrorMessage());
-        }
-        ASSERT(hr == S_OK);
+        COM_ERROR(hr);
 
         // get the complete swapchain interface
         hr = swapchain->QueryInterface(IID_PPV_ARGS(&g_d3d12swapchain3));
-        if (hr != S_OK) {
-                _com_error err(hr);
-                DEBUG("ERROR: %s", err.ErrorMessage());
-        }
-        ASSERT(hr == S_OK);
+        COM_ERROR(hr);
 
         // Create the dx12 buffers
         Buffers = (decltype(Buffers))calloc(g_buffercount, sizeof(*Buffers));
-        if (hr != S_OK) {
-                _com_error err(hr);
-                DEBUG("ERROR: %s", err.ErrorMessage());
-        }
         ASSERT(Buffers != NULL);
 
         ID3D12DescriptorHeap* heap;
@@ -98,39 +76,23 @@ extern void UI_Initialize(void* dx12_swapchain, void* dx12_commandqueue) {
         rtvdesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         rtvdesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         hr = dx12device->CreateDescriptorHeap(&rtvdesc, IID_PPV_ARGS(&heap));
-        if (hr != S_OK) {
-                _com_error err(hr);
-                DEBUG("ERROR: %s", err.ErrorMessage());
-        }
-        ASSERT(hr == S_OK);
+        COM_ERROR(hr);
 
         D3D12_CPU_DESCRIPTOR_HANDLE rtvhandle = heap->GetCPUDescriptorHandleForHeapStart();
         auto rtvsize = dx12device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
         for (unsigned i = 0; i < g_buffercount; ++i) {
                 hr = swapchain->GetBuffer(i, IID_PPV_ARGS(&Buffers[i].d3d12RenderTarget));
-                if (hr != S_OK) {
-                        _com_error err(hr);
-                        DEBUG("ERROR: %s", err.ErrorMessage());
-                }
-                ASSERT(hr == S_OK);
+                COM_ERROR(hr);
 
                 dx12device->CreateRenderTargetView(Buffers[i].d3d12RenderTarget, nullptr, rtvhandle);
 
                 D3D11_RESOURCE_FLAGS flags = { D3D11_BIND_RENDER_TARGET };
-                hr = g_d3d11on12device->CreateWrappedResource(Buffers[i].d3d12RenderTarget, &flags, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_PRESENT, IID_PPV_ARGS(&Buffers[i].d3d11WrappedBackBuffer));
-                if (hr != S_OK) {
-                        _com_error err(hr);
-                        DEBUG("ERROR: %s", err.ErrorMessage());
-                }
-                ASSERT(hr == S_OK);
+                hr = g_d3d11on12device->CreateWrappedResource(Buffers[i].d3d12RenderTarget, &flags, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET, IID_PPV_ARGS(&Buffers[i].d3d11WrappedBackBuffer));
+                COM_ERROR(hr);
 
                 hr = g_d3d11device->CreateRenderTargetView(Buffers[i].d3d11WrappedBackBuffer, nullptr, &Buffers[i].d3d11RenderTargetView);
-                if (hr != S_OK) {
-                        _com_error err(hr);
-                        DEBUG("ERROR: %s", err.ErrorMessage());
-                }
-                ASSERT(hr == S_OK);
+                COM_ERROR(hr);
 
                 rtvhandle.ptr += rtvsize;
         }
@@ -140,7 +102,7 @@ extern void UI_Initialize(void* dx12_swapchain, void* dx12_commandqueue) {
 }
 
 
-extern void UI_Render() {
+extern void DX11_Render() {
         if (g_initialized == false) return;
         const auto index = g_d3d12swapchain3->GetCurrentBackBufferIndex();
         ASSERT(index < g_buffercount);
@@ -161,7 +123,7 @@ extern void UI_Render() {
 }
 
 
-extern void UI_Release() {
+extern void DX11_Release() {
         if (g_initialized == false) return;
 
         for (unsigned i = 0; i < g_buffercount; ++i) {
