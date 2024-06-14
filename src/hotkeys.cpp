@@ -113,10 +113,12 @@ static void rebuild_hotkey_cache() {
 
 
 // wndproc calls this for every WM_KEYDOWN message
-extern void HotkeyReceiveKeypress(unsigned vk_key) {
-        const bool control = GetAsyncKeyState(VK_CONTROL);
-        const bool alt = GetAsyncKeyState(VK_MENU);
-        const bool shift = GetAsyncKeyState(VK_SHIFT);
+extern bool HotkeyReceiveKeypress(unsigned vk_key) {
+        if(vk_key == VK_SHIFT || vk_key == VK_CONTROL || vk_key == VK_MENU) return false;
+
+        const bool control = GetAsyncKeyState(VK_CONTROL) < 0;
+        const bool alt = GetAsyncKeyState(VK_MENU) < 0;
+        const bool shift = GetAsyncKeyState(VK_SHIFT) < 0;
         const auto key = make_hotkey(vk_key, control, alt, shift);
 
         // first check if we are waiting for a keypress to set a hotkey
@@ -125,7 +127,7 @@ extern void HotkeyReceiveKeypress(unsigned vk_key) {
                 AllHotkeys[index_waiting_for_input].set_key = key;
                 ActiveHotkeys[key] = index_waiting_for_input;
                 index_waiting_for_input = UINT32_MAX;
-                return;
+                return true;
         }
 
         //check to see if the cache needs to be rebuilt
@@ -140,7 +142,10 @@ extern void HotkeyReceiveKeypress(unsigned vk_key) {
                 DEBUG("Activating hotkey: %s", hotkey->name);
                 const auto callback = CallbackGetCallback(CALLBACKTYPE_HOTKEY, hotkey->owner);
                 callback.hotkey_callback(hotkey->userdata);
+                return true;
         }
+
+        return false;
 }
 
 // just for use in gui.cpp, it would be too cumbersome to try to split the hotkey code from the hotkey UI
@@ -184,7 +189,7 @@ extern void draw_hotkeys_tab() {
         table_headers[TC_HOTKEY_NAME] = "Hotkey Name";
         table_headers[TC_HOTKEY_COMBO] = "Hotkey Combo";
 
-        static const auto table_cell_renderer = [](void* table_userdata, int cur_row, int cur_col) {
+        static const auto table_cell_renderer = [](uintptr_t table_userdata, int cur_row, int cur_col) {
                 ASSERT(cur_col < TC_COUNT);
                 const auto base_index = (unsigned)table_userdata;
                 const auto hotkey_index = base_index + cur_row;
@@ -218,7 +223,7 @@ extern void draw_hotkeys_tab() {
                         break;
                 }
                 };
-        SimpleDraw->Table(table_headers, TC_COUNT, (void*)infos_index, index_count, table_cell_renderer);
+        SimpleDraw->Table(table_headers, TC_COUNT, infos_index, index_count, table_cell_renderer);
         SimpleDraw->HBoxEnd();
 }
 

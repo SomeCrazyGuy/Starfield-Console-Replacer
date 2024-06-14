@@ -13,6 +13,7 @@
 #include "hotkeys.h"
 
 #include "d3d11on12ui.h"
+#include "dx12ui.h"
 
 #define BETTERAPI_IMPLEMENTATION
 #include "../betterapi.h"
@@ -373,21 +374,27 @@ static void Callback_Config(ConfigAction action) {
         auto c = GetConfigAPI();
         auto s = GetSettingsMutable();
         c->ConfigU32(action, "FontScaleOverride", &s->FontScaleOverride);
-        if (action == ConfigAction_Write) {
-                HotkeySaveSettings();
-        }
         if (action != ConfigAction_Edit) {
                 c->ConfigU32(action, "CreateSwapChainForHwndSoft", &s->CreateSwapChainForHwndSoft);
                 c->ConfigU32(action, "SwapchainPresentHard", &s->SwapchainPresentHard);
+                c->ConfigU32(action, "UseOldRenderer", &s->UseOldRenderer);
         }
         else {
                 auto UI = API.SimpleDraw;
-                UI->Text("Renderer quirks, you must restart game to apply");
+                UI->Text("BetterConsole Renderer:");
+                UI->Checkbox("Use old v1.2 renderer", (bool*)&s->UseOldRenderer);
+                UI->Text("Renderer quirks:");
                 UI->Separator();
                 UI->Text("CreateSwapChainForHwnd hook mode:");
                 UI->Checkbox("Use soft hook", (bool*)&s->CreateSwapChainForHwndSoft);
                 UI->Text("SwapchainPresent hook mode:");
                 UI->Checkbox("Use hard hook", (bool*)&s->SwapchainPresentHard);
+                UI->Text("You must save the settings and restart the game to apply");
+        }
+
+        //do this last until i have this working with the official api
+        if (action == ConfigAction_Write) {
+                HotkeySaveSettings();
         }
 }
 
@@ -407,12 +414,26 @@ static void SetupModMenu() {
         static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = nullptr;
         static decltype(OLD_GetRawInputData) FAKE_GetRawInputData = [](HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) -> UINT {
                 auto ret = OLD_GetRawInputData(hri, cmd, data, data_size, hsize);
+                if (data == NULL) return ret;
+                 
+                if (cmd == RID_INPUT) {
+                        auto input = (RAWINPUT*)data;
 
-                if ((should_show_ui == false) || (data == NULL)) return ret;
+                        if (input->header.dwType == RIM_TYPEKEYBOARD) {
+                                auto keydata = input->data.keyboard;
+                                if (keydata.Message == WM_KEYDOWN || keydata.Message == WM_SYSKEYDOWN) {
+                                        if (HotkeyReceiveKeypress(keydata.VKey)) {
+                                                goto HIDE_INPUT_FROM_GAME;
+                                        }
+                                }
+                        }
 
-                //hide input from the game when shouldshowui is true and data is not null
-                auto input = (RAWINPUT*)data;
-                input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
+                        if (should_show_ui == false) return ret;
+
+                        HIDE_INPUT_FROM_GAME:
+                        //hide input from the game when shouldshowui is true and data is not null
+                        input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
+                }
                 return ret;
         };
         OLD_GetRawInputData = (decltype(OLD_GetRawInputData)) API.Hook->HookFunctionIAT("user32.dll", "GetRawInputData", (FUNC_PTR)FAKE_GetRawInputData);
@@ -498,7 +519,7 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
 
         static bool hooked = false;
         static IDXGISwapChain3* last_swapchain = nullptr;
-        static ID3D12CommandQueue* comand_queue = nullptr;
+        static ID3D12CommandQueue* command_queue = nullptr;
 
         if (last_swapchain != This) {
                 last_swapchain = This;
@@ -506,23 +527,40 @@ static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT Prese
                 for (auto i : Queues) {
                         DEBUG("Searching for CommandQueue for swapchain %p: [ chain: %p, queue: %p, age: %u ]", This, i.SwapChain, i.Queue, i.Age);
                         if (i.SwapChain == This) {
-                                comand_queue = i.Queue;
+                                command_queue = i.Queue;
                                 DEBUG("Commandqueue found!");
                                 break;
                         }
                 }
         }
         
-        if (should_show_ui) {
-                if (!hooked) {
-                        UI_Initialize(This, comand_queue);
-                        hooked = true;
+        static bool oldrenderer = GetSettings()->UseOldRenderer;
+
+        if (oldrenderer) {
+                if (should_show_ui) {
+                        if (!hooked) {
+                                DX12_Initialize(This, command_queue);
+                                hooked = true;
+                        }
+                        DX12_Render();
                 }
-                UI_Render();
+                else {
+                        DX12_Release();
+                        hooked = false;
+                }
         }
         else {
-                UI_Release();
-                hooked = false;
+                if (should_show_ui) {
+                        if (!hooked) {
+                                DX11_Initialize(This, command_queue);
+                                hooked = true;
+                        }
+                        DX11_Render();
+                }
+                else {
+                        DX11_Release();
+                        hooked = false;
+                }
         }
 
         // keep this detection code in place to detect breaking changes to the hook causing recursive nightmare
@@ -553,14 +591,6 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         ImGui_ImplWin32_Shutdown();
                 }
                 ImGui_ImplWin32_Init(hWnd);
-        }
-
-        static bool shift = false;
-        static bool ctrl = false;
-        static bool alt = false;
-
-        if (uMsg == WM_KEYDOWN) {
-                HotkeyReceiveKeypress((unsigned)(wParam & 0xFF));
         }
 
         if (should_show_ui) {

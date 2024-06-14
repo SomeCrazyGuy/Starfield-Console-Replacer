@@ -1,5 +1,7 @@
 #include "main.h"
-#include "..\imgui\imgui_impl_dx12.h"
+#include "../imgui/imgui_impl_dx12.h"
+#include "../imgui/imgui_impl_win32.h"
+#include "gui.h"
 #include <dxgi1_6.h>
 #include <d3d12.h>
 
@@ -23,9 +25,10 @@ struct RenderState {
 
 RenderState state;
 
-static void SetupRenderState(void* dx12_swapchain, void* dx12_commandqueue) {
+extern void DX12_Initialize(void* dx12_swapchain, void* dx12_commandqueue) {
         const auto Swapchain = (IDXGISwapChain*)dx12_swapchain;
-        const auto dx12queue = (ID3D12CommandQueue*)dx12_commandqueue;
+
+        state.commandQueue = (ID3D12CommandQueue*)dx12_commandqueue;
 
         Swapchain->QueryInterface(IID_PPV_ARGS(&state.swapchain));
         Swapchain->GetDevice(IID_PPV_ARGS(&state.device));
@@ -84,7 +87,14 @@ static void SetupRenderState(void* dx12_swapchain, void* dx12_commandqueue) {
 }
 
 
-void render() {
+extern void DX12_Render() {
+        ImGui_ImplDX12_NewFrame();
+        ImGui_ImplWin32_NewFrame();
+        ImGui::NewFrame();
+
+        draw_gui();
+
+        ImGui::Render();
         FrameContext& currentFrameContext = state.frameContext[state.swapchain->GetCurrentBackBufferIndex()];
         currentFrameContext.commandAllocator->Reset();
 
@@ -110,4 +120,8 @@ void render() {
         state.commandList->Close();
 
         state.commandQueue->ExecuteCommandLists(1, reinterpret_cast<ID3D12CommandList* const*>(&state.commandList));
+}
+
+void DX12_Release() {
+        //lol
 }
