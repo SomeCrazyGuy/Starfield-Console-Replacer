@@ -93,6 +93,10 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile>
       <PreprocessorDefinitions>BETTERAPI_DEVELOPMENT_FEATURES;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <PostBuildEvent>
+      <Command>copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)vcruntime140_1.dll"
+copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="imgui\imgui.cpp" />
@@ -107,7 +111,6 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile Include="src\callback.cpp" />
     <ClCompile Include="src\console.cpp" />
     <ClCompile Include="src\d3d11on12ui.cpp" />
-    <ClCompile Include="src\dx12ui.cpp" />
     <ClCompile Include="src\fake_vcruntime140_1.cpp" />
     <ClCompile Include="src\gui.cpp" />
     <ClCompile Include="src\hook_api.cpp" />
@@ -136,7 +139,6 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="src\callback.h" />
     <ClInclude Include="src\console.h" />
     <ClInclude Include="src\d3d11on12ui.h" />
-    <ClInclude Include="src\dx12ui.h" />
     <ClInclude Include="src\gui.h" />
     <ClInclude Include="src\gui_interface.h" />
     <ClInclude Include="src\hook_api.h" />

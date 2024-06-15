@@ -43,13 +43,13 @@ pcVar15 = "float fresult\nref refr\nset refr to GetSelectedRef\nset fresult to "
 
 #define OUTPUT_FILE_PATH "BetterConsoleOutput.txt"
 #define HISTORY_FILE_PATH "BetterConsoleHistory.txt"
+#define NUM_HOTKEY_COMMANDS 16
 
 
 enum class InputMode : uint32_t {
         Command,
         SearchOutput,
         SearchHistory,
-        Hotkeys
 };
 
 static void console_run(void* consolemgr, char* cmd);
@@ -80,6 +80,13 @@ static std::vector<uint32_t> SearchOutputLines{};
 static std::vector<uint32_t> SearchHistoryLines{};
 
 static uint32_t NumHotkeys = 0;
+static RegistrationHandle ModHandle = 0;
+
+struct Command {
+        char name[32];
+        char data[512];
+} HotkeyCommands[NUM_HOTKEY_COMMANDS];
+
 
 static void forward_to_old_consoleprint(void* consolemgr, const char* fmt, ...) {
         if (!consolemgr) return;
@@ -158,9 +165,6 @@ static void draw_console_window(void* imgui_context) {
                         }
                 }
                 SimpleDraw->ShowFilteredLogBuffer(HistoryHandle, SearchHistoryLines.data(), (uint32_t)SearchHistoryLines.size(), UpdateScroll);
-        }
-        else if (CommandMode == InputMode::Hotkeys) {
-                SimpleDraw->Text("Coming soon...");
         }
         else {
                 ASSERT(false && "Invalid command mode");
@@ -246,21 +250,41 @@ static bool strcasestr(const char* s, const char* find) {
 
 
 static void CALLBACK_console_settings(enum ConfigAction action) {
-       
+        char keyname[32];
+        for (uint32_t i = 0; i < 16; ++i) {
+                auto& hc = HotkeyCommands[i];
+                snprintf(keyname, sizeof(keyname), "Hotkey%u", i);
+                Config->ConfigString(action, keyname, hc.data, sizeof(hc.data));
+        }
+}
+
+static void CALLBACK_console_hotkey(uintptr_t userdata) {
+        auto index = (uint32_t)userdata;
+        char* hotkey = HotkeyCommands[index].data;
+        if (hotkey[0]) {
+                API->Console->RunCommand(hotkey);
+        }
 }
 
 
 // this should be the only interface between the console replacer and the mod menu code
 extern void setup_console(const BetterAPI* api) {
         API = api;
-        LogBuffer = api->LogBuffer;
 
-        //TODO: add console hotkeys tab
-        
         const auto CB = API->Callback;
-        const auto handle = CB->RegisterMod("BetterConsole");
-        CB->RegisterDrawCallback(handle, draw_console_window);
+        ModHandle = CB->RegisterMod("BetterConsole");
+        CB->RegisterDrawCallback(ModHandle, draw_console_window);
+        CB->RegisterConfigCallback(ModHandle, CALLBACK_console_settings);
+        CB->RegisterHotkeyCallback(ModHandle, CALLBACK_console_hotkey);
 
+        for (uint32_t i = 0; i < NUM_HOTKEY_COMMANDS; ++i) {
+                char key_name[32];
+                snprintf(key_name, sizeof(key_name), "Hotkey %u", i);
+                CB->RequestHotkey(ModHandle, key_name, i);
+        }
+
+
+        LogBuffer = api->LogBuffer;
         HookAPI = API->Hook;
         SimpleDraw = API->SimpleDraw;
         Config = API->Config;
@@ -271,18 +295,23 @@ extern void setup_console(const BetterAPI* api) {
         DEBUG("Hooking print function using AOB method");
         const auto hook_print_aob = HookAPI->AOBScanEXE("48 89 5c 24 ?? 48 89 6c 24 ?? 48 89 74 24 ?? 57 b8 30 10 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 49");
         ASSERT(hook_print_aob != NULL && "Could not hook console_print function (mod conflict or game version incompatible?)");
-        OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
-                (FUNC_PTR)hook_print_aob,
-                (FUNC_PTR)console_print
-        );
+        
+        if (hook_print_aob != NULL) {
+                OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
+                        (FUNC_PTR)hook_print_aob,
+                        (FUNC_PTR)console_print
+                );
+        }
 
         DEBUG("Hooking run function using AOB method");
         const auto hook_run_aob = HookAPI->AOBScanEXE("48 8b c4 48 89 50 ?? 4c 89 40 ?? 4c 89 48 ?? 55 53 56 57 41 55 41 56 41 57 48 8d");
         ASSERT(hook_run_aob != NULL && "Could not hook console_run function (mod conflict or game version incompatible?)");
-        OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
-                (FUNC_PTR)hook_run_aob,
-                (FUNC_PTR)console_run
-        );
+        if (hook_run_aob != NULL) {
+                OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
+                        (FUNC_PTR)hook_run_aob,
+                        (FUNC_PTR)console_run
+                );
+        }
 
         IOBuffer[0] = 0;
 }

@@ -13,7 +13,6 @@
 #include "hotkeys.h"
 
 #include "d3d11on12ui.h"
-#include "dx12ui.h"
 
 #define BETTERAPI_IMPLEMENTATION
 #include "../betterapi.h"
@@ -35,9 +34,11 @@ static void OnHotheyActivate(uintptr_t);
 static void SetupModMenu();
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+static HRESULT FAKE_ResizeBuffers(IDXGISwapChain3* This, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
 static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT PresentFlags);
 static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
+static decltype(FAKE_ResizeBuffers)* OLD_ResizeBuffers = nullptr;
 static decltype(FAKE_Present)* OLD_Present = nullptr;
 static decltype(FAKE_Wndproc)* OLD_Wndproc = nullptr;
 
@@ -235,7 +236,7 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                 if (Queues[i].Queue == (ID3D12CommandQueue*)Device) {
                         //if the device is already in the queue, just update the swapchain parameter
                         Queues[i].SwapChain = *ppSwapChain;
-                        DEBUG("Reuse Queues[%u] '%p' Age: %llu, for new swapchain '%p'", i, Device, Queues[i].Age, *ppSwapChain);
+                        DEBUG("REPLACE [%u]: CommandQueue: '%p', SwapChain: '%p'", i, Queues[i].Queue, Queues[i].SwapChain);
                         Queues[i].Age = 0;
                         swapchain_inserted = true;
                         break;
@@ -244,12 +245,12 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                         Queues[i].Queue = (ID3D12CommandQueue*)Device;
                         Queues[i].SwapChain = *ppSwapChain;
                         Queues[i].Age = 0;
-                        DEBUG("Add Device '%p' to Queues[%u] with swapchain '%p'", Device, i, *ppSwapChain);
+                        DEBUG("ADD [%u]: CommandQueue: '%p', SwapChain: '%p'", i, Queues[i].Queue, Queues[i].SwapChain);
                         swapchain_inserted = true;
                         break;
                 }
                 else {
-                        DEBUG("Queues[%u] possibly unused commandqueue: '%p'", i, Queues[i].Queue);
+                        DEBUG("UNUSED [%u]: CommandQueue: '%p', SwapChain: '%p', Age: %llu", i, Queues[i].Queue, Queues[i].SwapChain, Queues[i].Age);
                         Queues[i].Age++;
                 }
         }
@@ -267,8 +268,13 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                 Queues[highest].Age = 0;
                 Queues[highest].Queue = (ID3D12CommandQueue*)Device;
                 Queues[highest].SwapChain = *ppSwapChain;
-                DEBUG("Queues[%u] was overwritten", highest);
+                DEBUG("Overwrite[%u]: CommandQueue: '%p', SwapChain: '%p'", highest, Queues[highest].Queue, Queues[highest].SwapChain);
         }
+
+        for(unsigned i = 0; i < MAX_QUEUES; ++i) {
+                DEBUG("FINAL STATE [%u]: CommandQueue: '%p', SwapChain: '%p', Age: %llu", i, Queues[i].Queue, Queues[i].SwapChain, Queues[i].Age);
+        }
+
 
         
         auto proc = (decltype(OLD_Wndproc))GetWindowLongPtrW(hWnd, GWLP_WNDPROC);
@@ -291,28 +297,77 @@ static HRESULT FAKE_CreateSwapChainForHwnd(
                 GetParent,
                 GetDevice,
                 Present,
+                GetBuffer,
+                SetFullscreenState,
+                GetFullscreenState,
+                GetDesc,
+                ResizeBuffers,
         };
         
+        static void* vtable[128]; // 128 should be enough :)
         
         static bool once = false;
         if (!once) {
-                if (GetSettings()->SwapchainPresentHard) {
-                        // hard hook breaks rivatuner but emulates old behavior
-                        FUNC_PTR* fp = *(FUNC_PTR**)*ppSwapChain;
-                        DEBUG("HookFunction: IDXGISwapChain::Present");
-                        OLD_Present = (decltype(OLD_Present))API.Hook->HookFunction(fp[Present], (FUNC_PTR)FAKE_Present);
-                }
-                else {
-                        OLD_Present = (decltype(OLD_Present))API.Hook->HookVirtualTable(
-                                *ppSwapChain,
-                                Present,
-                                (FUNC_PTR)FAKE_Present
-                        );
-                }
-                DEBUG("Hooked Present, OLD_Present: %p, NEW_Present: %p", OLD_Present, FAKE_Present);
                 once = true;
+
+                // I wish it didnt have to come to this, but it does.
+                // Steam overwrites the start of the IDXGISwapChain::Present
+                // function with a JMP to GameOverlayRenderer.dll so that it can
+                // render the steam overlay. RivaTuner aggressively replaces
+                // the same start of IDXGISwapChain::Present with a JMP to
+                // RTSS64.dll every frame to reassert dominance. then chainloads
+                // the original steam overlay hook.
+                // I need to hook IDXGISwapChain::Present too, so I hooked the
+                // virtual function table at the offset of Present.
+                // It should end there, but the Steam Overlay occasionally
+                // reasserts that its hooks are in place and the way it does
+                // that is to lookup the address of IDXGISwapChain::Present
+                // in the vtable - and it finds my hook.
+                // So Steam ends up overwriting my hook with a JMP to
+                // GameOverlayRenderer.dll that then redirects back to my Present
+                // that calls OLD_Present that was already hooked by steam or
+                // rivatuner, then BOOM! infinite loop.
+                // So now I need a hook that when the game calls present()
+                // its my hook, then rivatuner's aggressive hook, then steam
+                // overlay, then nvidia stramline native, then maybe eventually
+                // the original IDXGISwapChain::Present in dxgi.dll
+                // 
+                // This is the solution I came up with. Im just going to copy all
+                // the vtable functions from whatever IDXGISwapChain that this
+                // function just created, then replace the vtable pointer of
+                // every instance of IDXGISwapChain that comes down t   he line
+                // with the new vtable. Its silly but it works.
+
+                memcpy(vtable, **(void***)ppSwapChain, sizeof(vtable));
+
+                OLD_Present = (decltype(OLD_Present))vtable[Present];
+                vtable[Present] = (void*)FAKE_Present;
+
+                OLD_ResizeBuffers = (decltype(OLD_ResizeBuffers))vtable[ResizeBuffers];
+                vtable[ResizeBuffers] = (void*)FAKE_ResizeBuffers;
+
+                DEBUG("Hooked Present, OLD_Present: %p, NEW_Present: %p", OLD_Present, FAKE_Present);
+                DEBUG("Hooked ResizeBuffers, OLD_ResizeBuffers: %p, NEW_ResizeBuffers: %p", OLD_ResizeBuffers, FAKE_ResizeBuffers);
+
+                /*
+                OLD_Present = (decltype(OLD_Present))API.Hook->HookVirtualTable(
+                        *ppSwapChain,
+                        Present,
+                        (FUNC_PTR)FAKE_Present
+                );
+                DEBUG("Hooked Present, OLD_Present: %p, NEW_Present: %p", OLD_Present, FAKE_Present);
+                
+                OLD_ResizeBuffers = (decltype(OLD_ResizeBuffers))API.Hook->HookVirtualTable(
+                        *ppSwapChain,
+                        ResizeBuffers,
+                        (FUNC_PTR)FAKE_ResizeBuffers
+                );
+                */
         }
-        
+
+        DEBUG("Hooked Swapchain: %p, replacing vtable: %p with: %p", *ppSwapChain, **(void***)ppSwapChain, vtable);
+        **(void***)ppSwapChain = vtable;
+
         return ret;
 }
 
@@ -347,23 +402,11 @@ static HRESULT FAKE_CreateDXGIFactory2(UINT Flags, REFIID RefID, void **ppFactor
                         CreateSwapChainForHwnd
                 };
 
-                
-                if (GetSettings()->CreateSwapChainForHwndSoft) {
-                        // Soft hook breaks steam overlay, but emulates old behavior
-                        OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))
-                                API.Hook->HookVirtualTable(
-                                        *ppFactory,
-                                        CreateSwapChainForHwnd,
-                                        (FUNC_PTR)FAKE_CreateSwapChainForHwnd
-                                );
-                }
-                else {
-                        // Using a stronger hook here because otherwise the steam overlay will not function
-                        // not sure why a vmt hook doesnt work here, steam checks and rejects?
-                        FUNC_PTR* fp = *(FUNC_PTR**)*ppFactory;
-                        DEBUG("HookFunction: CreateSwapChainForHwnd");
-                        OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookFunction(fp[CreateSwapChainForHwnd], (FUNC_PTR)FAKE_CreateSwapChainForHwnd);
-                }
+                // Using a stronger hook here because otherwise the steam overlay will not function
+                // not sure why a vmt hook doesnt work here, steam checks and rejects?
+                FUNC_PTR* fp = *(FUNC_PTR**)*ppFactory;
+                DEBUG("HookFunction: CreateSwapChainForHwnd");
+                OLD_CreateSwapChainForHwnd = (decltype(OLD_CreateSwapChainForHwnd))API.Hook->HookFunction(fp[CreateSwapChainForHwnd], (FUNC_PTR)FAKE_CreateSwapChainForHwnd);
         }
 
         return ret;
@@ -374,24 +417,7 @@ static void Callback_Config(ConfigAction action) {
         auto c = GetConfigAPI();
         auto s = GetSettingsMutable();
         c->ConfigU32(action, "FontScaleOverride", &s->FontScaleOverride);
-        if (action != ConfigAction_Edit) {
-                c->ConfigU32(action, "CreateSwapChainForHwndSoft", &s->CreateSwapChainForHwndSoft);
-                c->ConfigU32(action, "SwapchainPresentHard", &s->SwapchainPresentHard);
-                c->ConfigU32(action, "UseOldRenderer", &s->UseOldRenderer);
-        }
-        else {
-                auto UI = API.SimpleDraw;
-                UI->Text("BetterConsole Renderer:");
-                UI->Checkbox("Use old v1.2 renderer", (bool*)&s->UseOldRenderer);
-                UI->Text("Renderer quirks:");
-                UI->Separator();
-                UI->Text("CreateSwapChainForHwnd hook mode:");
-                UI->Checkbox("Use soft hook", (bool*)&s->CreateSwapChainForHwndSoft);
-                UI->Text("SwapchainPresent hook mode:");
-                UI->Checkbox("Use hard hook", (bool*)&s->SwapchainPresentHard);
-                UI->Text("You must save the settings and restart the game to apply");
-        }
-
+ 
         //do this last until i have this working with the official api
         if (action == ConfigAction_Write) {
                 HotkeySaveSettings();
@@ -512,62 +538,66 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
 }
 
 
+static HRESULT FAKE_ResizeBuffers(IDXGISwapChain3* This, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags) {
+        if (should_show_ui) {
+                DX11_ReleaseIfInitialized();
+        }
+        DEBUG("ResizeBuffers: %p, BufferCount: %u, Width: %u, Height: %u, NewFormat: %u", This, BufferCount, Width, Height, NewFormat);
+        return OLD_ResizeBuffers(This, BufferCount, Width, Height, NewFormat, SwapChainFlags);
+}
+
+
 static HRESULT FAKE_Present(IDXGISwapChain3* This, UINT SyncInterval, UINT PresentFlags) {
         if (EveryNFrames(240)) {
                 DEBUG("render heartbeat, showing ui: %s", (should_show_ui)? "true" : "false");
         }
 
-        static bool hooked = false;
         static IDXGISwapChain3* last_swapchain = nullptr;
         static ID3D12CommandQueue* command_queue = nullptr;
 
+        SwapChainQueue* best_match = nullptr;
+        for (uint32_t i = 0; i < MAX_QUEUES; ++i) {
+                //DEBUG("SEARCH [%u]: CommandQueue: '%p', SwapChain: '%p', Age: %u, Match: %s", i, Queues[i].Queue, Queues[i].SwapChain, Queues[i].Age, (Queues[i].SwapChain == This) ? "True" : "False");
+                if (Queues[i].SwapChain == This) {
+                        if (best_match == nullptr || Queues[i].Age < best_match->Age) {
+                                best_match = &Queues[i];
+                        }
+                }
+        }
+        ASSERT(best_match != nullptr);
+        //DEBUG("BEST MATCH: CommandQueue: '%p', SwapChain: '%p', Age: %u", best_match->Queue, best_match->SwapChain, best_match->Age);
+        
+        if (command_queue != best_match->Queue) {
+                command_queue = best_match->Queue;
+                DX11_ReleaseIfInitialized();
+        }
+
+
         if (last_swapchain != This) {
                 last_swapchain = This;
-                
-                for (auto i : Queues) {
-                        DEBUG("Searching for CommandQueue for swapchain %p: [ chain: %p, queue: %p, age: %u ]", This, i.SwapChain, i.Queue, i.Age);
-                        if (i.SwapChain == This) {
-                                command_queue = i.Queue;
-                                DEBUG("Commandqueue found!");
-                                break;
-                        }
-                }
+                DX11_ReleaseIfInitialized();
         }
         
-        static bool oldrenderer = GetSettings()->UseOldRenderer;
 
-        if (oldrenderer) {
-                if (should_show_ui) {
-                        if (!hooked) {
-                                DX12_Initialize(This, command_queue);
-                                hooked = true;
-                        }
-                        DX12_Render();
-                }
-                else {
-                        DX12_Release();
-                        hooked = false;
-                }
+        if (should_show_ui) {
+                DX11_InitializeOrRender(This, command_queue);
         }
         else {
-                if (should_show_ui) {
-                        if (!hooked) {
-                                DX11_Initialize(This, command_queue);
-                                hooked = true;
-                        }
-                        DX11_Render();
-                }
-                else {
-                        DX11_Release();
-                        hooked = false;
-                }
+                DX11_ReleaseIfInitialized();
         }
+
 
         // keep this detection code in place to detect breaking changes to the hook causing recursive nightmare
         static unsigned loop_check = 0;
         ASSERT((loop_check == 0) && "recursive hook detected");
         ++loop_check;
         auto ret = OLD_Present(This, SyncInterval, PresentFlags);
+        if (ret == DXGI_ERROR_DEVICE_REMOVED || ret == DXGI_ERROR_DEVICE_RESET) {
+                DEBUG("DXGI_ERROR_DEVICE_REMOVED || DXGI_ERROR_DEVICE_RESET");
+                //DX11_ReleaseIfInitialized();
+        } else if (ret != S_OK) {
+                DEBUG("Swapchain::Present returned error: %u", ret);
+        }
         --loop_check;
 
         return ret;
@@ -591,6 +621,14 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         ImGui_ImplWin32_Shutdown();
                 }
                 ImGui_ImplWin32_Init(hWnd);
+        }
+
+        if (uMsg == WM_KEYDOWN && wParam == VK_F1) {
+                //OnHotheyActivate(0); // this is for debugging only
+        }
+
+        if (uMsg == WM_SIZE || uMsg == WM_CLOSE) {
+                DX11_ReleaseIfInitialized();
         }
 
         if (should_show_ui) {

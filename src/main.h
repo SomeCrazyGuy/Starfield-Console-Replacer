@@ -43,12 +43,12 @@ extern void TraceImpl(const char* const filename, const char* const func, int li
 #include "../imgui/imgui.h"
 
 
-#define BETTERCONSOLE_VERSION "1.3.1"
+#define BETTERCONSOLE_VERSION "1.4.0"
 
 // --------------------------------------------------------------------
 // ---- Change these offsets for each game update                  ----
 // --------------------------------------------------------------------
-constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 11, 36);
+constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 12, 32);
 
 
 
@@ -57,9 +57,6 @@ constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 11, 36);
 //---------------------------------------------------------------------------------------------
 struct ModMenuSettings {
         uint32_t FontScaleOverride = 0;
-        uint32_t CreateSwapChainForHwndSoft = 0;
-        uint32_t SwapchainPresentHard = 0;
-        uint32_t UseOldRenderer = 0;
 };
 
 extern const ModMenuSettings* GetSettings();

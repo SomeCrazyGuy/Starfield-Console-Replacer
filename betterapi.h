@@ -321,7 +321,7 @@ typedef const char* (*CALLBACK_SELECTIONLIST)(const void* userdata, uint32_t ind
 // `current_column` is the index of the current column in the table that is being drawn
 // TODO: next version update this to use unsigned integers and possibly use uintptr_t 
 //       instead of void* for table_userdata
-typedef void (*CALLBACK_TABLE)(void* table_userdata, int current_row, int current_column);
+typedef void (*CALLBACK_TABLE)(uintptr_t table_userdata, int current_row, int current_column);
 
 
 // This is the main api you will use to add betterconsole integration to your mod
@@ -399,12 +399,25 @@ struct callback_api_t {
 /// This API is used for saving and loading data to a configuration file.
 struct config_api_t {
         // this handles read / write / edit on 32-bit unsigned integers
+        // if a config value for key_name is not found, value is not modified
+        // this way you can initialize all variables to a default value
         void (*ConfigU32)(ConfigAction action, const char* key_name, uint32_t* value);
+
+#ifdef BETTERAPI_DEVELOPMENT_FEATURES
+
+        // read, write, and edit for string values
+        // `in_out_buffer` is a pointer to a buffer that will be read, written, or edited
+        // `buffer_size` is the length of the bufer in bytes
+        // ConfigString stops on the first null character of the input or output
+        // unlike other config functions, this function does write to the output if lookup fails on read (first byte becomes null)
+        // and sets "in_out_buffer[buffer_size - 1] = 0" on action write
+        void (*ConfigString)(ConfigAction action, const char* key_name, char* in_out_buffer, uint32_t buffer_size);
 
         // get the unparsed string value of a key if it exists or null
         //const char* (*ConfigRead)(const char* key_name);
 
         // more types will be added here in the future
+#endif // BETTERAPI_DEVELOPMENT_FEATURES
 };
 
 
@@ -437,6 +450,13 @@ struct hook_api_t {
 
         // !EXPERIMENTAL API! AOB scan the exe memory and return the first match 
         void* (*AOBScanEXE)(const char* signature);
+
+#ifdef BETTERAPI_DEVELOPMENT_FEATURES
+        // build a wall so high that nobody can see the top from the highest ladder
+        // https://devblogs.microsoft.com/oldnewthing/20110310-00/?p=11253
+        void** (*LiterallyReplaceEntireVtable)(void*** ppClassInstance, uint32_t method_count);
+#endif // BETTERAPI_DEVELOPMENT_FEATURES
+
 };
 
 // This API allows you to create a basic mod menu without linking to imgui.
@@ -555,7 +575,7 @@ struct simple_draw_t {
         //             the table is row_count * header_count
         // `draw_cell` is a callback that is called for each *visible* cell in the table
         // Proper vertical and horizontal clipping is done to accelerate even very large tables
-        void (*Table)(const char * const * const header_labels, uint32_t header_count, void* table_userdata, uint32_t row_count, CALLBACK_TABLE draw_cell);
+        void (*Table)(const char * const * const header_labels, uint32_t header_count, uintptr_t table_userdata, uint32_t row_count, CALLBACK_TABLE draw_cell);
 
 
         // draw tabs that can be switched between
@@ -645,11 +665,42 @@ struct console_api_t {
         //       for the console to be ready (if your compiling shaders
         //       the game could seem frozen for several minutes)
         // there should be a way to know when the console is ready, but
-        // as i dont link with sfse, addresslibrary, commonlibsf or anything
-        // i have to figure it out myself.
+        // as I dont link with sfse, addresslibrary, commonlibsf or anything
+        // I have to figure it out myself. Maybe see when startingconsolecommand
+        // is run?
         void (*RunCommand)(char* command);
 };
 
+
+// Open to feedback:
+// in the future, instead of having one version of the api
+// and one version of the betterapi struct, pass in a 
+// service locator and resolve dependencies on a more
+// granular level that does not rely on struct layout
+#if BETTERAPI_VERSION > 1
+enum ServiceType {
+        ServiceType_Callback,
+        ServiceType_Hook, 
+        // etc...
+};
+
+
+// Get a pointer to an api struct.
+// This allows betterconsole to return different versions of the api
+//      depending on mod compatibility.
+typedef const void* (*BetterServiceLocator)(enum ServiceType type, uint32_t version);
+
+
+//then instead of providing a betterapi pointer, only send the locator and version data:
+DLLEXPORT int BetterConsoleReceiver2(BetterServiceLocator locator, uint32_t betterconsole_api_level) {
+        static better_api_t api;
+        api.Callback = locator(ServiceType_Callback, 1); //something like this?
+        // we could have #defines for BETTERAPI_ENABLE_CONFIG or something
+        // so you only enable the parts of the api that you use, less chance of
+        // breaking compatibility if we only incrementally update unpopular APIs
+        return OnBetterConsoleLoad(&api);
+}
+#endif
 
 // This is all the above structs wrapped up in one place
 // why pointers to apis instead of the api itself? so that
@@ -794,17 +845,9 @@ typedef struct SFSEMessagingInterface_t {
 #define DLLEXPORT __declspec(dllexport)
 #endif // __cplusplus
 static int OnBetterConsoleLoad(const struct better_api_t* betterapi);
-#if BETTERAPI_VERSION == 1
+// In a future API version we need to return a value from this function
+// it makes sense to know and log if a mod can't load
 DLLEXPORT void BetterConsoleReceiver(const struct better_api_t* api) {
         OnBetterConsoleLoad(api);
 }
-#else
-#define MAKE_NAME(NAME) NAME##BETTERCONSOLE_VERSION
-DLLEXPORT int MAKE_NAME(BetterConsoleReceiver) {
-        if (api->betterapi_version == BETTERAPI_VERSION) {
-                return OnBetterConsoleLoad(api);
-        }
-        return -1; //error, plugin not compatible
-}
-#endif // BETTERAPI_VERSION == 1
 #endif // BETTERAPI_IMPLEMENTATION

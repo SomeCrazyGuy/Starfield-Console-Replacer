@@ -158,7 +158,7 @@ static bool simple_selection_list(uint32_t* selection, const void* userdata, uin
 }
 
 
-static void simple_draw_table(const char * const * const headers, uint32_t header_count, void* rows_userdata, uint32_t row_count, CALLBACK_TABLE draw_cell) {
+static void simple_draw_table(const char * const * const headers, uint32_t header_count, uintptr_t rows_userdata, uint32_t row_count, CALLBACK_TABLE draw_cell) {
         if (ImGui::BeginTable("SimpleDrawTable", header_count, ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable)) {
                 for (uint32_t i = 0; i < header_count; ++i) {
                         ImGui::TableSetupColumn(headers[i]);

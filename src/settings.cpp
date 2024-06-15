@@ -36,7 +36,7 @@ static ConfigFile* BetterConsoleConfig = nullptr;
 static const auto SimpleDraw = GetSimpleDrawAPI();
 
 
-static uint64_t hash_fnv1a(const char* str) {
+static inline uint64_t hash_fnv1a(const char* str) {
         uint64_t ret = 0xcbf29ce484222325;
 
         unsigned char c;
@@ -48,6 +48,28 @@ static uint64_t hash_fnv1a(const char* str) {
         return ret;
 }
 
+static char OutputBuffer[4096];
+static unsigned OutputBufferPos = 0;
+
+static inline void BufferedOutputFlush() {
+        WriteFile(BetterConsoleConfig->out_file, OutputBuffer, OutputBufferPos, NULL, NULL);
+}
+
+static inline void BufferedOutputWrite(const char* text) {
+        while (*text) {
+                while (OutputBufferPos < sizeof(OutputBuffer)) {
+                        if (!*text) return;
+
+                        OutputBuffer[OutputBufferPos++] = *text++;
+                }
+                WriteFile(BetterConsoleConfig->out_file, OutputBuffer, 4096, NULL, NULL);
+                OutputBufferPos = 0;
+        }
+}
+
+static inline void BufferedOutputStart() {
+        OutputBufferPos = 0;
+}
 
 // I'm actually very happy with the config loader
 // the only improvement would be memory mapping it
@@ -272,6 +294,7 @@ extern void ConfigOpen(ConfigFile* file) {
         }
 
         file->mod_name = nullptr;
+        BufferedOutputStart();
 }
 
 // set the mod_name to namespace the subsequent settings to
@@ -284,6 +307,7 @@ extern void ConfigSetMod(const char* mod_name) {
 
 // perform the necessary actions to finish writing the config file
 extern void ConfigClose(ConfigFile* file) {
+        BufferedOutputFlush();
         CloseHandle(file->out_file);
         file->out_file = INVALID_HANDLE_VALUE;
 }
@@ -307,9 +331,12 @@ const char* ConfigLookupKey(const char* key_name) {
 }
 
 
-extern void ConfigWriteString(ConfigFile* file, const char* str) {
-        //TODO more checks
-        WriteFile(file->out_file, str, (DWORD)strlen(str), NULL, NULL);
+
+static inline void ConfigWriteKey(const char* key_name) {
+        BufferedOutputWrite(BetterConsoleConfig->mod_name);
+        BufferedOutputWrite(":");
+        BufferedOutputWrite(key_name);
+        BufferedOutputWrite("!");
 }
 
 
@@ -319,19 +346,132 @@ extern void ConfigU32(ConfigAction action, const char* key_name, uint32_t* value
                 if (val) *value = strtoul(val, nullptr, 0);
         }
         else if (action == ConfigAction_Write) {
-                char write_buffer[128];
-                snprintf(write_buffer, sizeof(write_buffer), "%s:%s!%u\n", BetterConsoleConfig->mod_name, key_name, *value);
-                ConfigWriteString(BetterConsoleConfig, write_buffer);
+                ConfigWriteKey(key_name);
+                char fmt[32];
+                snprintf(fmt, sizeof(fmt), "%u\n", *value);
+                BufferedOutputWrite(fmt);
         }
         else if (action == ConfigAction_Edit) {
                 ImGui::DragScalar(key_name, ImGuiDataType_U32, value);
         }
 }
 
+static void ConfigReadEscapedString(const char* in_value, char* out, uint32_t out_size) {
+        const char* v = in_value;
+
+        // we use a quote at the front of the string
+        // to prevent the whitespace trimmer in the
+        // parser from interfering
+        if (*v == '\"') ++v;
+
+        for (uint32_t i = 0; i < out_size; ++i) {
+                char outchar = 0;
+
+                //handle escape sequence
+                if (*v == '\\') {
+                        ++v;
+                        switch (*v)
+                        {
+                                // the parser only cares about certain characters
+                                // so only need to handle those
+                        case '0': outchar = 0;
+                                break;
+                        case 'n': outchar = '\n';
+                                break;
+                        case 'e': outchar = '!';
+                                break;
+                        case '\\': outchar = '\\';
+                                break;
+                        case '"': outchar = '"';
+                                break;
+                        default:
+                                //invalid escape sequence
+                                outchar = 0;
+                        }
+                        ++v;
+                } else {
+                        if (*v == '"') {
+                                //all quoted strings are escaped
+                                //therefore, this is the string terminator
+                                outchar = 0;
+                        }
+                        else {
+                                outchar = *v++;
+                        }
+                }
+
+                out[i] = outchar;
+                if (!outchar) break;
+        }
+
+        //ensure null termination
+        out[out_size - 1] = 0;
+}
+
+
+static void ConfigWriteEscapedString(const char *in_unescaped_string) {
+        const char* in = in_unescaped_string;
+
+        //so that parser doesnt trim whitespace unintentionally
+        BufferedOutputWrite("\"");
+
+        uint32_t str; // kinda weird
+        while (*in) {
+                if (*in == '\\') {
+                        // works on little-endian platforms
+                        str = ('\\' | ('\\' << 8));
+                }
+                else if (*in == '\n') {
+                        str = ('\\' | ('n' << 8));
+                }
+                else if (*in == '!') {
+                        str = ('\\' | ('e' << 8));
+                }
+                else if (*in == '\"') {
+                        str = ('\\' | ('"' << 8));
+                }
+                else {
+                        str = *in;
+                }
+                BufferedOutputWrite((const char*)&str);
+                ++in;
+        }
+
+        // insert escape sequence so that the parser doesnt
+        // trim whitespace unintentionally
+        BufferedOutputWrite("\"\n");
+}
+
+
+
+// configstring:
+//  - should always null terminate out_buffer even if it has to truncate the value
+//  - should escape and unescape the string for proper storage into the config file
+//  - stops at the first null character (nulls are not encoded / decoded)
+//  - never reads or writes beyond out_buffer[buffer_size - 1]
+static void ConfigString(ConfigAction action, const char* key_name, char* out_buffer, uint32_t buffer_size) {
+        if (action == ConfigAction_Read) {
+                *out_buffer = 0;
+                const auto value = ConfigLookupKey(key_name);
+                if (value) {
+                        ConfigReadEscapedString(value, out_buffer, buffer_size);
+                }
+        }
+        else if (action == ConfigAction_Write) {
+                out_buffer[buffer_size - 1] = 0; //now we can assume null termination
+                ConfigWriteKey(key_name);
+                ConfigWriteEscapedString(out_buffer);
+        }
+        else if (action == ConfigAction_Edit) {
+                ImGui::InputText(key_name, out_buffer, buffer_size);
+        }
+}
+
 
 static constexpr const struct config_api_t Config = {
         //ConfigLookupKey,
-        ConfigU32
+        ConfigU32,
+        ConfigString
 };
 
 
@@ -364,6 +504,7 @@ extern void SaveSettingsRegistry() {
                 const auto callback = CallbackGetCallback(CALLBACKTYPE_CONFIG, config[i]);
                 callback.config_callback(ConfigAction_Write);
         }
+
         ConfigClose(BetterConsoleConfig);
 }
 

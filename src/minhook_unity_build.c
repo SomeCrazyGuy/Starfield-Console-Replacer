@@ -1,15 +1,7 @@
-#include "../minhook/MinHook.h"
-#include "../minhook/trampoline.h"
-#include "../minhook/buffer.h"
-
-#include "../minhook/hde/pstdint.h"
-#include "../minhook/hde/hde64.h"
-
 #include "../minhook/hde/hde64.c"
 #include "../minhook/buffer.c"
 #include "../minhook/trampoline.c"
 #include "../minhook/hook.c"
-
 
 #include "minhook_unity_build.h"
 
