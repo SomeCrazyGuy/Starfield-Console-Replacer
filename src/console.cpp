@@ -40,6 +40,9 @@ pcVar15 = "float fresult\nref refr\nset refr to GetSelectedRef\nset fresult to "
 
 */
 
+// Forced offsets 1.12.32
+#define OFFSET_CONSOLE_PRINT 0x29cd9b8
+#define OFFSET_CONSOLE_RUN 0x29c7f44
 
 #define OUTPUT_FILE_PATH "BetterConsoleOutput.txt"
 #define HISTORY_FILE_PATH "BetterConsoleHistory.txt"
@@ -253,7 +256,7 @@ static void CALLBACK_console_settings(enum ConfigAction action) {
         char keyname[32];
         for (uint32_t i = 0; i < 16; ++i) {
                 auto& hc = HotkeyCommands[i];
-                snprintf(keyname, sizeof(keyname), "Hotkey%u", i);
+                snprintf(keyname, sizeof(keyname), "Hotkey Command%u", i);
                 Config->ConfigString(action, keyname, hc.data, sizeof(hc.data));
         }
 }
@@ -279,10 +282,9 @@ extern void setup_console(const BetterAPI* api) {
 
         for (uint32_t i = 0; i < NUM_HOTKEY_COMMANDS; ++i) {
                 char key_name[32];
-                snprintf(key_name, sizeof(key_name), "Hotkey %u", i);
+                snprintf(key_name, sizeof(key_name), "HotkeyCommand %u", i);
                 CB->RequestHotkey(ModHandle, key_name, i);
         }
-
 
         LogBuffer = api->LogBuffer;
         HookAPI = API->Hook;
@@ -293,25 +295,30 @@ extern void setup_console(const BetterAPI* api) {
         HistoryHandle = LogBuffer->Restore("Command History", HISTORY_FILE_PATH);
 
         DEBUG("Hooking print function using AOB method");
-        const auto hook_print_aob = HookAPI->AOBScanEXE("48 89 5c 24 ?? 48 89 6c 24 ?? 48 89 74 24 ?? 57 b8 30 10 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 49");
-        ASSERT(hook_print_aob != NULL && "Could not hook console_print function (mod conflict or game version incompatible?)");
+        auto hook_print_aob = HookAPI->AOBScanEXE("48 89 5c 24 ?? 48 89 6c 24 ?? 48 89 74 24 ?? 57 b8 30 10 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 49");
         
-        if (hook_print_aob != NULL) {
-                OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
-                        (FUNC_PTR)hook_print_aob,
-                        (FUNC_PTR)console_print
-                );
+        if (!hook_print_aob) {
+                DEBUG("hook_print_aob AOB method failed, (incompatible mod or game update?)");
+                hook_print_aob = HookAPI->Relocate(OFFSET_CONSOLE_PRINT);
         }
 
+        OLD_ConsolePrintV = (decltype(OLD_ConsolePrintV))HookAPI->HookFunction(
+                (FUNC_PTR)hook_print_aob,
+                (FUNC_PTR)console_print
+        );
+
         DEBUG("Hooking run function using AOB method");
-        const auto hook_run_aob = HookAPI->AOBScanEXE("48 8b c4 48 89 50 ?? 4c 89 40 ?? 4c 89 48 ?? 55 53 56 57 41 55 41 56 41 57 48 8d");
-        ASSERT(hook_run_aob != NULL && "Could not hook console_run function (mod conflict or game version incompatible?)");
-        if (hook_run_aob != NULL) {
-                OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
-                        (FUNC_PTR)hook_run_aob,
-                        (FUNC_PTR)console_run
-                );
+        auto hook_run_aob = HookAPI->AOBScanEXE("48 8b c4 48 89 50 ?? 4c 89 40 ?? 4c 89 48 ?? 55 53 56 57 41 55 41 56 41 57 48 8d");
+        
+        if (!hook_run_aob) {
+                DEBUG("hook_run_aob AOB method failed, (incompatible mod or game update?)");
+                hook_run_aob = HookAPI->Relocate(OFFSET_CONSOLE_RUN);
         }
+
+        OLD_ConsoleRun = (decltype(OLD_ConsoleRun))HookAPI->HookFunction(
+                (FUNC_PTR)hook_run_aob,
+                (FUNC_PTR)console_run
+        );
 
         IOBuffer[0] = 0;
 }
