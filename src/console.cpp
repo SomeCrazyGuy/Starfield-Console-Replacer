@@ -324,12 +324,15 @@ extern void setup_console(const BetterAPI* api) {
 }
 
 
-extern const struct console_api_t* GetConsoleAPI() {
-        static const struct console_api_t Console {
-                [](char* command) noexcept -> void {
-                        console_run(NULL, command);
-                }
-        };
+static void run_comand(char* command) {
+        console_run(NULL, command);
+}
 
+
+static constexpr struct console_api_t Console {
+        run_comand
+};
+
+extern constexpr const struct console_api_t* GetConsoleAPI() {
         return &Console;
 }

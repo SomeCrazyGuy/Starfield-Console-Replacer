@@ -11,6 +11,7 @@
 #include "broadcast_api.h"
 #include "std_api.h"
 #include "hotkeys.h"
+#include "std_api.h"
 
 #include "d3d11on12ui.h"
 
@@ -73,16 +74,6 @@ extern char* GetPathInDllDir(char* path_max_buffer, const char* filename) {
 }
 
 
-const char* const filename_only(const char* path) {
-        const char* p = path;
-        while (*path) {
-                if (*path == '\\') p = path;
-                ++path;
-        }
-        return ++p;
-}
-
-
 #ifdef MODMENU_DEBUG
 #include <mutex>
 std::mutex logging_mutex;
@@ -106,7 +97,7 @@ static void write_log(const char* const str) noexcept {
         logging_mutex.unlock();
 }
 extern void DebugImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept {
-        auto bytes = snprintf(format_buffer, buffer_size, "%s:%s:%d>", filename_only(filename), func, line);
+        auto bytes = snprintf(format_buffer, buffer_size, "%s:%s:%d>", filename, func, line);
         ASSERT(bytes > 0);
         ASSERT(bytes < buffer_size);
 
@@ -132,7 +123,7 @@ extern void AssertImpl [[noreturn]] (const char* const filename, const char* con
                 "In function '%s'\n"
                 "On line     '%d'\n"
                 "Message:    '%s'",
-                filename_only(filename),
+                filename,
                 func,
                 line,
                 text
@@ -146,7 +137,7 @@ extern void AssertImpl [[noreturn]] (const char* const filename, const char* con
 extern void TraceImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept {
         static bool init = false;
         static char tracebuff[2048];
-        const auto bytes = snprintf(tracebuff, sizeof(tracebuff), "%s:%s:%d> ", filename_only(filename), func, line);
+        const auto bytes = snprintf(tracebuff, sizeof(tracebuff), "%s:%s:%d> ", filename, func, line);
         ASSERT(bytes > 0 && "trace buffer too small ?");
         va_list args;
         va_start(args, fmt);

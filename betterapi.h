@@ -1,19 +1,169 @@
 #ifndef BETTERAPI_API_H
 #define BETTERAPI_API_H
 
-// Always use the latest betterapi.h file from github in your build if the BETTERAPI_VERSION
-// number is compatible with the published version of betterconsole on nexusmods.
-// sometimes small hacks or fixes are put here to fix issues in the published mod between releases.
+
+// Always use the latest betterapi.h file from github!
+// Sometimes small hacks or fixes are put here to resolve
+// issues in the published mod between releases. You
+// can find the latest version here:
 // https://raw.githubusercontent.com/SomeCrazyGuy/Starfield-Console-Replacer/master/betterapi.h
 
 
-// Version number for betterapi, when a new version of betterconsole changes the public API
-// this number is incremented. Usually only when bigger feature changes are added.
-// I will not break the API in a bugfix release of betterconsole and feature releases
-// are not expected to happen more often than starfield updates.
-// Usually porting to a new version of the api is as easy as dropping in the new betterapi.h
-// into your build and fixing the compiler errors (if any).
+///////////////////////////////////////////////////////////////////////////////
+//                 Table Of Contents
+///////////////////////////////////////////////////////////////////////////////
+// 1) The Unlicense
+// 2) Release History
+// 3) About this file
+// 4) Configuring Better API
+// 5) Quick Start Guide
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+//                 1) The Unlicense
+///////////////////////////////////////////////////////////////////////////////
+// 
+// This is free and unencumbered software released into the public domain.
+// 
+// Anyone is free to copy, modify, publish, use, compile, sell, or
+// distribute this software, either in source code form or as a compiled
+// binary, for any purpose, commercial or non-commercial, and by any
+// means.
+// 
+// In jurisdictions that recognize copyright laws, the author or authors
+// of this software dedicate any and all copyright interest in the
+// software to the public domain. We make this dedication for the benefit
+// of the public at large and to the detriment of our heirs and
+// successors. We intend this dedication to be an overt act of
+// relinquishment in perpetuity of all present and future rights to this
+// software under copyright law.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+// IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+// OTHER DEALINGS IN THE SOFTWARE.
+// 
+// For more information, please refer to <http://unlicense.org/>
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+//                 2) Release History
+///////////////////////////////////////////////////////////////////////////////
+// 
+// 1.3.0 and older - no longer supported!
+// 
+// 1.3.1 - 2024-06-09 Starfield v1.2.30
+//         First version using the new entrypoint "BetterConsoleReceiver"
+//
+// 1.4.0 - 2024-06-14 Starfield v1.2.32
+//         No public API changes
+//
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+//                 3) About this file
+///////////////////////////////////////////////////////////////////////////////
+// This is the public API for the Starfield mod BetterConsole:
+// <https://www.nexusmods.com/starfield/mods/3683>
+// 
+// This file is a zero dependency header only library in the style of STB
+// libraries: <https://github.com/nothings/stb>
+// 
+// As such it is written in a way that shows the <s>limitations</s> <i>features</i>
+// of the C programming language. This is all an excuse to say: "if it looks like
+// something is being done the hard or wrong way, don't worry, it is intentional"
+//
+// BetterConsole itself is mostly written in C with some C++ features sprinkled in
+// for flavor, but the public API (betterapi.h) is intended to be plain C99 code
+// and include only two standard C headers: "stdint.h" and "stdbool.h". "betterapi.h"
+// itself calls no external functions: not from the game, not the windows api,
+// not even standard library functions. It is trivial to integrate into any other
+// mod as it is a single file and there is no library to link with. Betterapi uses
+// a callback system to mediate between your mod and BetterConsole. Betterapi is
+// always a soft dependency which means that your mod can use BetterConsole APIs
+// when they are available, but the lack of BetterConsole in the load order does
+// not break your mod. The way this works is by exporting a function 
+// "BetterConsoleReceiver" which, if BetterConsole is loaded, will be called
+// automatically just after Starfield creates a DirectX graphics context.
+// BetterConsoleReceiver is generated by this file when you define the macro
+// BETTERAPI_IMPLEMENTATION before including "betterapi.h". Because this function
+// is not just declared but fully implemented in this header you must only define
+// the BETTERAPI_IMPLEMENTATION macro in a single translation unit (.c or .cpp file)
+// of your mod project to avoid linker errors about "multiple definition of function"
+// As part of the glue code BetterConsoleReceiver will perform version and
+// compatibility checking with the BetterConsole runtime component before calling
+// your entrypoint for the API: "OnBetterConsoleLoad". Please read through the quick
+// start guide to see an example of how you would implement "OnBetterConsoleLoad".
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+//                 4) Configuring Better API
+///////////////////////////////////////////////////////////////////////////////
+// Without configuration, "betterapi.h" will use the most compatible and lowest
+// supported feature set. It is recommended to always use the lowest feature
+// level necessary for your mod to function to maintain compatibility with
+// BetterConsole versions in the past as well as the future. As new versions
+// of BetterConsole are released, new API functions become available that were
+// not in previous versions. At the minimum, your mod should support at least
+// one previous feature level to allow mod collections that include an older
+// release of BetterConsole to catch up to newer game releases.
+// 
+// Configuration is now done through a separate file "betterapiconfig.h".
+// Documentation for all configuration options is also the responsibility
+// of that file. You can find an example "betterapiconfig.h" in the "extra"
+// folder of the source code repo or distributed with future versions of the
+// example plugin. Uncomment the line below to use "betterapiconfig.h".
+ 
+//#include "betterapiconfig.h"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// By default betterapi.h only enables the base featureset
+// from version 1.3.1 (which itself is almost 100%) compatible
+// with the first version released. To access newer functions
+// and capabilities you will need to define the configuration
+// variable BETTERAPI_FEATURE_LEVEL to a specific release of
+// BetterConsole like V(1,3,1) for version 1.3.1
+// Dont worry, I'll undef this at the end of the file, nobody
+// wants single letter macros polluting the namespace.
+#ifdef V
+#error "V is already defined!"
+#endif // V
+#define V(MAJOR, MINOR, PATCH) ((((MAJOR)&0xFF)<<16|((MINOR)&0xFF)<<8|((PATCH)&0xFF))>=(BETTERAPI_FEATURE_LEVEL))
+
+
+// This is the API version of betterconsole, its not
+// expected to change often and by the time version
+// 2 becomes the default, the released version of
+// BetterConsole will have supported both versions
+// of the API for more than one release cycle.
+#ifndef BETTERAPI_VERSION
 #define BETTERAPI_VERSION 1
+#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -721,6 +871,158 @@ typedef struct better_api_t {
         const struct std_api_t* Stdlib;
         const struct console_api_t* Console;
 } BetterAPI;
+
+
+// Dont keep silgle letter macros around outside this file
+#ifdef V
+#undef V
+#endif // V
+
+
+///////////////////////////////////////////////////////////////////////////////
+//                 5) Quick Start Guide
+///////////////////////////////////////////////////////////////////////////////
+// Adding BetterConsole features to your mod is very easy, you should be able
+// to get a basic GUI up and running within minutes. The "betterapi.h" file can
+// be included anywhere in your project and the only build requirement is to
+// enable the implementation of the BetterConsole "glue code" by defining
+// BETTERAPI_IMPLEMENTATION before including "betterapi.h" in *one* .c or .cpp
+// file. The only code you need to write is the "OnBetterConsoleLoad" function.
+// OnBetterConsoleLoad is called by BetterConsole when Starfield begins drawing
+// to the screen. This function will be used to register your mod with BetterConsole.
+// Take a look at this example for a basic plugin or build the example yourself
+// by defining BETTERAPI_BUILTIN_EXAMPLE before including "betterapi.h"
+#ifdef BETTERAPI_BUILTIN_EXAMPLE
+
+// Create the implementation glue code, this can only be done once per project
+#define BETTERAPI_IMPLEMENTATION
+
+// The example builds a combination ASI and SFSE plugin by enabling the minimal
+// SFSE glue code also available in betterapi
+#define BETTERAPI_ENABLE_SFSE_MINIMAL
+
+// Use betterapi, you can include this anywhere you need to access hte features
+#include "betterapi.h"
+
+// It is usually convenient to make aliases for the betterconsole API structures
+static const struct better_api_t* API = NULL;
+static const struct simple_draw_t* UI = NULL;
+
+// Forward declarations of callback functions used in this example
+void MyDrawCallback(void*);
+void MyConfigCallback(ConfigAction);
+void MyHotkeyCallback(uintptr_t);
+
+// Global plugin state
+static uint32_t ButtonClickCounter = 0;
+
+// Usually for hotkey requests you want your hotkey userdata to be an enum
+enum MyHotkeyAction {
+        MHA_Reset,
+        MHA_Click,
+        MHA_ClickTwice
+};
+
+// This function will be called automaticcally when BetterConsole is loaded and
+// your plugin is compatible with the runing version of BetterConsole.
+static int OnBetterConsoleLoad(const struct better_api_t* better_api) {
+        API = better_api;
+        UI = API->SimpleDraw;
+
+        // The first step is to register your plugin name with BetterConsole
+        // The name used here will show up in the GUI so that the user can 
+        // recognize your mod.
+        RegistrationHandle my_mod_handle = API->Callback->RegisterMod("Example");
+
+        // Everything else is optional, but likely you will want to also
+        // register a draw callback so your mod shows up in the UI.
+        API->Callback->RegisterDrawCallback(my_mod_handle, &MyDrawCallback);
+
+        // There are several types of callbacks depending on what kind of event
+        // you want to make a handler for. This line registers a configuration
+        // callback.
+        API->Callback->RegisterConfigCallback(my_mod_handle, &MyConfigCallback);
+
+        // The hotkey feature is activated in two steps, first register a callback:
+        API->Callback->RegisterHotkeyCallback(my_mod_handle, &MyHotkeyCallback);
+
+        // Then for each hotkey action you want to have, request a hotkey for it.
+        // The specific key combination used to activate a hotkey is set by the
+        // user in the "Mod Menu" > "Hotkeys" tab of BetterConsole.
+        API->Callback->RequestHotkey(my_mod_handle, "Reset Click Counter", MHA_Reset);
+        API->Callback->RequestHotkey(my_mod_handle, "Add A Click", MHA_Click);
+        API->Callback->RequestHotkey(my_mod_handle, "Add 2 Clicks", MHA_ClickTwice);
+
+        // return 0 if your plugin loaded correctly or
+        // return any positive number to indicate a failure
+        return 0;
+}
+
+// The draw callback is called whenever your plugin needs to draw something.
+// There are many widgets available, but for simplicity lets make a basic example.
+void MyDrawCallback(void*) {
+        UI->Text("Hello World!");
+        if (UI->Button("Click Me")) {
+                ++ButtonClickCounter;
+        }
+        UI->Text("You pressed the button %u times", ButtonClickCounter);
+}
+
+// The config callback is called when the "BetterConsoleConfig.txt" file is loaded
+// (read event), when the file is saved (write event), or when the user is in
+// "Mod Menu" > "Settings" and selects your mod to configure it (edit event).
+void MyConfigCallback(ConfigAction action) {
+        // The Config api offers default actions for certain types (like uint32_t)
+        API->Config->ConfigU32(action, "Button Click Couter", &ButtonClickCounter);
+}
+
+// Hotkeys are global, they can be activated even when BetterConsole is not shown.
+// Only one draw callback per mod is allowed, but you can use the userdata paramiter
+// of the callback to tell which action was requested.
+void MyHotkeyCallback(uintptr_t userdata) {
+        enum MyHotkeyAction act = (enum MyHotkeyAction)userdata;
+
+        if (act == MHA_Reset) {
+                ButtonClickCounter = 0;
+        }
+        else if (act == MHA_Click) {
+                ButtonClickCounter++;
+        }
+        else if (act == MHA_ClickTwice) {
+                ButtonClickCounter += 2;
+        }
+}
+
+// The following allows the example plugin to also be an sfse plugin
+// more details are in the sfse section
+// Step 1) Export this struct so sfse knows your DLL is compatible
+DLLEXPORT SFSEPluginVersionData SFSEPlugin_Version = {
+        1,     // SFSE api version, 1 is current
+        1,     // Plugin api version, 1 is current
+        "BetterConsole Example Plugin",   // Mod/Plugin Name (limit: 255 characters)
+        "Linuxversion",    // Mod Author(s)   (limit: 255 characters)
+                // Address Independance:
+        1,      // 0 - hardcoded offsets (game version specific)
+                // 1 - signature scanning (not version specific)
+                // Structure Independance:
+        1,      // 0 - relies on specific game structs
+                // 1 - mod does not care if game structs change
+                // Compatible Game Versions:
+{                                 // A list of up to 15 game versions
+        MAKE_VERSION(1, 11, 36),  // This means compatible with 1.11.36
+        0                         // The list must be terminated with 0
+},                                // if address & structure independent
+                                  // then this is minimum version required
+        0,      // 0 = does not rely on any specific sfse version
+        0, 0    // reserved fields, must be 0
+};
+
+// Step 2) Export this function so sfse knows to load your dll.
+//         Doing anything inside the function is optional.
+DLLEXPORT void SFSEPlugin_Load(const SFSEInterface* sfse) {}
+
+#endif // BETTERAPI_BUILTIN_EXAMPLE
+
 #endif // !BETTERAPI_API_H
 
 
@@ -732,52 +1034,7 @@ typedef struct better_api_t {
 // For people that want to port Cheat Engine or ASI mods to sfse without including
 // sfse code into the project, define BETTERAPI_ENABLE_SFSE_MINIMAL before 
 // including betterapi.h, this should get you 90% of the way to a
-// plug and play sfse plugin with no brain required:
-// 
-// #define BETTERAPI_ENABLE_SFSE_MINIMAL
-// #define BETTERAPI_IMPLEMENTATION
-// #include "betterapi.h"
-
-// if you want your dll to be loadable with sfse you need to export two symbols:
-// `SFSEPlugin_Version` and `SFSEPlugin_Load` paste this in one translation unit
-// and modify to suit your needs:
-
-/*
-// Step 1) Export this struct so sfse knows your DLL is compatible
-DLLEXPORT SFSEPluginVersionData SFSEPlugin_Version = {
-        1,     // SFSE api version, 1 is current
-
-        1,     // Plugin api version, 1 is current
-
-        "BetterConsole",   // Mod/Plugin Name (limit: 255 characters)
-
-        "Linuxversion",    // Mod Author(s)   (limit: 255 characters)
-
-               // Address Independance:
-        1,     // 0 - hardcoded offsets (game version specific)
-               // 1 - signature scanning (not version specific)
-
-               // Structure Independance:
-        1,     // 0 - relies on specific game structs
-               // 1 - mod does not care if game structs change
-
-                                          // Compatible Game Versions:
-        {                                 // A list of up to 15 game versions
-                MAKE_VERSION(1, 11, 36),  // This means compatible with 1.11.36
-                0                         // The list must be terminated with 0
-        },                                // if address & structure independent
-                                          // then this is minimum version required
-
-        0,      // 0 = does not rely on any specific sfse version
-
-        0, 0               // reserved fields, must be 0
-};
-
-// Step 2) Export this function so sfse knows to load your dll.
-//         Doing anything inside the function is optional.
-DLLEXPORT void SFSEPlugin_Load(const SFSEInterface * sfse) {}
-*/
-
+// plug and play sfse plugin with no brain required.
 
 #define MAKE_VERSION(major, minor, build) ((((major)&0xFF)<<24)|(((minor)&0xFF)<<16)|(((build)&0xFFF)<<4))
 
