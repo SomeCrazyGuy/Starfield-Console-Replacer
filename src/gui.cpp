@@ -18,7 +18,7 @@ extern void draw_gui() {
 
         auto imgui_context = ImGui::GetCurrentContext();
         ImGui::Begin("BetterConsole");
-        ImGui::BeginTabBar("mod tabs");
+        ImGui::BeginTabBar("mod tabs", ImGuiTabBarFlags_FittingPolicyScroll | ImGuiTabBarFlags_Reorderable | ImGuiTabBarFlags_AutoSelectNewTabs);
 
         if (GetSettings()->FontScaleOverride == 0) {
                 GetSettingsMutable()->FontScaleOverride = 100;
@@ -75,14 +75,16 @@ extern void draw_gui() {
                 ImGui::EndTabBar();
                 ImGui::EndTabItem();
         }
-        
+
 
         uint32_t draw_count = 0;
         const auto draw_callback = CallbackGetHandles(CALLBACKTYPE_DRAW, &draw_count);
         for (uint32_t i = 0; i < draw_count; ++i) {
                 const auto handle = draw_callback[i];
                 ImGui::PushID(handle);
-                if (ImGui::BeginTabItem(CallbackGetName(handle))) {
+                static bool focus_tab = false;
+                if (ImGui::BeginTabItem(CallbackGetName(handle), nullptr, (!focus_tab)? ImGuiTabItemFlags_SetSelected : 0)) {
+                        focus_tab = true;
                         CallbackGetCallback(CALLBACKTYPE_DRAW, handle).draw_callback(imgui_context);
                         ImGui::EndTabItem();
                 }

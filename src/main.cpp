@@ -12,6 +12,7 @@
 #include "std_api.h"
 #include "hotkeys.h"
 #include "std_api.h"
+#include "game_hooks.h"
 
 #include "d3d11on12ui.h"
 
@@ -47,6 +48,7 @@ static decltype(FAKE_Wndproc)* OLD_Wndproc = nullptr;
 static HINSTANCE self_module_handle = nullptr;
 static bool should_show_ui = false;
 static bool betterapi_load_selftest = false;
+static uint32_t setting_pause_on_ui_open = false;
 
 #define EveryNFrames(N) []()->bool{static unsigned count=0;if(++count==(N)){count=0;}return !count;}()
 
@@ -408,6 +410,7 @@ static void Callback_Config(ConfigAction action) {
         auto c = GetConfigAPI();
         auto s = GetSettingsMutable();
         c->ConfigU32(action, "FontScaleOverride", &s->FontScaleOverride);
+        c->ConfigU32(action, "Pause Game when BetterConsole opened", &setting_pause_on_ui_open);
  
         //do this last until i have this working with the official api
         if (action == ConfigAction_Write) {
@@ -472,6 +475,9 @@ static void SetupModMenu() {
         ImGui::StyleColorsDark();
         DEBUG("ImGui one time init completed!");
 
+        // Setup all game-specific hooks
+        GameHook_Init();
+
         // Gather all my friends!
         BroadcastBetterAPIMessage(&API);
         ASSERT(betterapi_load_selftest == true);
@@ -487,7 +493,6 @@ static int OnBetterConsoleLoad(const struct better_api_t* api) {
         ASSERT(api == &API && "Betterconsole already loaded?? Do you have multiple versions of BetterConsole installed?");
         
         // The console part of better console is now minimally coupled to the mod menu
-        DEBUG("Console setup - crashing here is AOB issue");
         setup_console(api);
 
         //should the hotkeys code be an internal plugin too?
@@ -509,10 +514,7 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
                 /* lock the linker/dll loader until hooks are installed, TODO: make sure this code path is fast */
                 static bool RunHooksOnlyOnce = true;
                 ASSERT(RunHooksOnlyOnce == true); //i want to know if this assert ever gets triggered
-
-#ifdef _DEBUG
                 //while (!IsDebuggerPresent()) Sleep(100);
-#endif // _DEBUG
 
                 self_module_handle = self;
 
@@ -633,6 +635,13 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 static void OnHotheyActivate(uintptr_t) {
         should_show_ui = !should_show_ui;
         DEBUG("ui toggled");
+
+        if (setting_pause_on_ui_open) {
+                const auto Hook = GameHook_GetData()->GetGamePausedFlag();
+                if (Hook) {
+                        *Hook = should_show_ui;
+                }
+        }
 
         if (!should_show_ui) {
                 //when you close the UI, settings are saved

@@ -60,12 +60,13 @@ extern void TraceImpl(const char* const filename, const char* const func, int li
 #include "../imgui/imgui.h"
 
 
-#define BETTERCONSOLE_VERSION "1.4.0"
+#define BETTERCONSOLE_VERSION "1.4.1"
+#define COMPATIBLE_GAME_VERSION "1.12.36"
 
 // --------------------------------------------------------------------
 // ---- Change these offsets for each game update                  ----
 // --------------------------------------------------------------------
-constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 12, 32);
+constexpr uint32_t GAME_VERSION = MAKE_VERSION(1, 12, 36);
 
 
 

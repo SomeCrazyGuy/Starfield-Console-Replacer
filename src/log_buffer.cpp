@@ -157,7 +157,8 @@ static constexpr struct log_buffer_api_t LogBufferAPI {
 	&LogBufferGetLineCount,
 	&LogBufferGetLine,
 	&LogBufferAppend,
-	&LogBufferRestore
+	&LogBufferRestore,
+	&LogBufferClear
 };
 
 
