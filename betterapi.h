@@ -40,9 +40,10 @@
 //    18) C Library API
 //    19) Game Console API
 //    20) Wrapped Windows API
-//    21) File I/O API
-//    22) BetterConsole API
-//    23) SFSE Minimal Interface
+//    21) CSV file API
+//    22) String Parser API
+//    23) BetterConsole API
+//    24) SFSE Minimal Interface
 
 
 
@@ -1080,7 +1081,9 @@ struct windows_api_t {
 #endif
 
 
-// this is the api for parsing csv files
+///////////////////////////////////////////////////////////////////////////////
+//                 21) CSV file API
+///////////////////////////////////////////////////////////////////////////////
 struct csv_api_t {
         // Load a csv file
         // returns NULL on error
@@ -1109,6 +1112,9 @@ struct csv_api_t {
 };
 
 
+///////////////////////////////////////////////////////////////////////////////
+//                 22) String Parser API
+///////////////////////////////////////////////////////////////////////////////
 struct parse_api_t {
         // parse a utf-8 string as a 64-bit unsigned integer
         // returns false on parse error
@@ -1192,7 +1198,7 @@ struct parse_api_t {
 
 
 ///////////////////////////////////////////////////////////////////////////////
-//                 22) BetterConsole API
+//                 23) BetterConsole API
 ///////////////////////////////////////////////////////////////////////////////
 
 // This is all the above structs wrapped up in one place
@@ -1233,7 +1239,7 @@ struct service_locator_t {
 
 
 ///////////////////////////////////////////////////////////////////////////////
-//                 23) SFSE Minimal Interface
+//                 24) SFSE Minimal Interface
 ///////////////////////////////////////////////////////////////////////////////
 
 // For people that want to port Cheat Engine or ASI mods to sfse without including
