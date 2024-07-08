@@ -1,11 +1,9 @@
 #include "main.h"
 #include "gui.h"
 #include "hotkeys.h"
+#include "simpledraw.h"
 
-// maybe more the shellopen stuff to a utility header?
-#include <Windows.h>
-#include <shellapi.h>
-
+static const auto UI = GetSimpleDrawAPI();
 
 extern void draw_gui() {
         static bool once = false;
@@ -41,35 +39,14 @@ extern void draw_gui() {
                         ImGui::EndTabItem();
                 }
                 if (ImGui::BeginTabItem("Help")) {
-                        if (ImGui::Button("NexusMods")) {
-                                ShellExecuteA(NULL, "open", "https://www.nexusmods.com/starfield/mods/3683", NULL, NULL, 1);
-                        }
-                        if (ImGui::Button("Reddit (not checked often)")) {
-                                ShellExecuteA(NULL, "open", "https://www.reddit.com/user/linuxversion/", NULL, NULL, 1);
-                        }
-                        if (ImGui::Button("Constellation by V2 (discord)")) {
-                                ShellExecuteA(NULL, "open", "https://discord.gg/v2-s-collections-1076179431195955290", NULL, NULL, 1);
-                        }
-                        if (ImGui::Button("Discord (not ready yet)")) {
-                                ImGui::OpenPopup("NoDiscordServer");
-                        }
-                        if (ImGui::BeginPopup("NoDiscordServer")) {
-                                char message[] = "Sorry, no discord server has been setup yet!\n"
-                                        "I wouldn't have the time to moderate it anyway.\n"
-                                        "But you can direct message me, my username is: linuxversion\n"
-                                        "If you installed this mod as part of the Constellation by V2 collection,\n"
-                                        "then you can report betterconsole issues on that discord server.";
-                                ImGui::Text(message);
-                                ImGui::EndPopup();
-                        }
-                        if (ImGui::Button("Open Log File")) {
-                                char path[260];
-                                ShellExecuteA(NULL, "open", GetPathInDllDir(path, "BetterConsoleLog.txt"), NULL, NULL, 1);
-                        }
-                        if (ImGui::Button("Open Config File")) {
-                                char path[260];
-                                ShellExecuteA(NULL, "open", GetPathInDllDir(path, "BetterConsoleConfig.txt"), NULL, NULL, 1);
-                        }
+                        UI->Text("BetterConsole Version %s, Compatible with Starfield 1.11.36 - %s", BETTERCONSOLE_VERSION, COMPATIBLE_GAME_VERSION);
+                        UI->LinkButton("NexusMods", "https://www.nexusmods.com/starfield/mods/3683");
+                        UI->LinkButton("Reddit (not checked often)", "https://www.reddit.com/user/linuxversion/");
+                        UI->LinkButton("Constellation by V2 (discord)", "https://discord.gg/v2-s-collections-1076179431195955290");
+                        UI->LinkButton("Github", "https://github.com/SomeCrazyGuy/Starfield-Console-Replacer");
+                        char path[260];
+                        UI->LinkButton("Open Log File", GetPathInDllDir(path, "BetterConsoleLog.txt"));
+                        UI->LinkButton("Open Config File", GetPathInDllDir(path, "BetterConsoleConfig.txt"));
                         ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();

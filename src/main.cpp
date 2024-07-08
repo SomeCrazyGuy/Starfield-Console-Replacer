@@ -13,6 +13,9 @@
 #include "hotkeys.h"
 #include "std_api.h"
 #include "game_hooks.h"
+#include "winapi.h"
+#include "csv_parser.h"
+#include "parser.h"
 
 #include "d3d11on12ui.h"
 
@@ -48,7 +51,7 @@ static decltype(FAKE_Wndproc)* OLD_Wndproc = nullptr;
 static HINSTANCE self_module_handle = nullptr;
 static bool should_show_ui = false;
 static bool betterapi_load_selftest = false;
-static uint32_t setting_pause_on_ui_open = false;
+static bool setting_pause_on_ui_open = false;
 
 #define EveryNFrames(N) []()->bool{static unsigned count=0;if(++count==(N)){count=0;}return !count;}()
 
@@ -76,89 +79,6 @@ extern char* GetPathInDllDir(char* path_max_buffer, const char* filename) {
 }
 
 
-#ifdef MODMENU_DEBUG
-#include <mutex>
-std::mutex logging_mutex;
-static thread_local char format_buffer[4096];
-static constexpr auto buffer_size = sizeof(format_buffer);
-static void write_log(const char* const str) noexcept {
-        static HANDLE debugfile = INVALID_HANDLE_VALUE;
-        logging_mutex.lock();
-        if (debugfile == INVALID_HANDLE_VALUE) {
-                char path[MAX_PATH];
-                debugfile = CreateFileA(GetPathInDllDir(path, "BetterConsoleLog.txt"), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        }
-        if (debugfile != INVALID_HANDLE_VALUE) {
-                WriteFile(debugfile, str, (DWORD)strnlen(str, 4096), NULL, NULL);
-                FlushFileBuffers(debugfile);
-        }
-        else {
-                MessageBoxA(NULL, "Could not write to 'BetterConsoleLog.txt'", "ASSERTION FAILURE", 0);
-                abort();
-        }
-        logging_mutex.unlock();
-}
-extern void DebugImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept {
-        auto bytes = snprintf(format_buffer, buffer_size, "%s:%s:%d>", filename, func, line);
-        ASSERT(bytes > 0);
-        ASSERT(bytes < buffer_size);
-
-        va_list args;
-        va_start(args, fmt);
-        bytes += vsnprintf(&format_buffer[bytes], buffer_size - bytes, fmt, args);
-        va_end(args);
-        ASSERT(bytes > 0);
-        ASSERT(bytes < buffer_size);
-
-        format_buffer[bytes++] = '\n';
-        format_buffer[bytes] = '\0';
-        ASSERT(bytes < buffer_size);
-
-        write_log(format_buffer);
-}
-
-extern void AssertImpl [[noreturn]] (const char* const filename, const char* const func, int line, const char* const text) noexcept {
-        snprintf(
-                format_buffer,
-                buffer_size,
-                "In file     '%s'\n"
-                "In function '%s'\n"
-                "On line     '%d'\n"
-                "Message:    '%s'",
-                filename,
-                func,
-                line,
-                text
-        );
-        write_log("!!! ASSERTION FAILURE !!!\n");
-        write_log(format_buffer);
-        MessageBoxA(NULL, format_buffer, "BetterConsole Crashed!", 0);
-        abort();
-}
-
-extern void TraceImpl(const char* const filename, const char* const func, int line, const char* const fmt, ...) noexcept {
-        static bool init = false;
-        static char tracebuff[2048];
-        const auto bytes = snprintf(tracebuff, sizeof(tracebuff), "%s:%s:%d> ", filename, func, line);
-        ASSERT(bytes > 0 && "trace buffer too small ?");
-        va_list args;
-        va_start(args, fmt);
-        const auto bytes2 = vsnprintf(tracebuff + bytes, sizeof(tracebuff) - bytes, fmt, args);
-        ASSERT(bytes2 > 0 && "trace buffer too small ?");
-        tracebuff[bytes + bytes2] = '\r';
-        tracebuff[bytes + bytes2 + 1] = '\n';
-        tracebuff[bytes + bytes2 + 2] = '\0';
-        va_end(args);
-        if (!init) {
-                AllocConsole();
-                FILE* file = nullptr;
-                freopen_s(&file, "CONIN$", "rb", stdin);
-                freopen_s(&file, "CONOUT$", "wb", stdout);
-                freopen_s(&file, "CONOUT$", "wb", stderr);
-        }
-        fputs(tracebuff, stdout);
-}
-#endif
 
 
 //this is where the api* that all clients use comes from
@@ -169,7 +89,10 @@ static const BetterAPI API {
         GetCallbackAPI(),
         GetConfigAPI(),
         GetStdAPI(),
-        GetConsoleAPI()
+        GetGameHookAPI(),
+        GetWindowsAPI(),
+        GetCSVAPI(),
+        GetParserAPI()
 };
 
 
@@ -410,12 +333,41 @@ static void Callback_Config(ConfigAction action) {
         auto c = GetConfigAPI();
         auto s = GetSettingsMutable();
         c->ConfigU32(action, "FontScaleOverride", &s->FontScaleOverride);
-        c->ConfigU32(action, "Pause Game when BetterConsole opened", &setting_pause_on_ui_open);
+        c->ConfigBool(action, "Pause Game when BetterConsole opened", &setting_pause_on_ui_open);
  
         //do this last until i have this working with the official api
         if (action == ConfigAction_Write) {
                 HotkeySaveSettings();
         }
+}
+
+
+static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = nullptr;
+
+UINT FAKE_GetRawInputData(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) {
+        auto ret = OLD_GetRawInputData(hri, cmd, data, data_size, hsize);
+        if (data == NULL) return ret;
+
+        if (cmd == RID_INPUT) {
+                auto input = (RAWINPUT*)data;
+
+                if (input->header.dwType == RIM_TYPEKEYBOARD) {
+                        auto keydata = input->data.keyboard;
+                        if (keydata.Message == WM_KEYDOWN || keydata.Message == WM_SYSKEYDOWN) {
+                                if (HotkeyReceiveKeypress(keydata.VKey)) {
+                                        goto HIDE_INPUT_FROM_GAME;
+                                }
+                        }
+                }
+
+                if (should_show_ui == false) return ret;
+
+        HIDE_INPUT_FROM_GAME:
+                //hide input from the game when shouldshowui is true and data is not null
+                input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
+        }
+
+        return ret;
 }
 
 
@@ -431,31 +383,7 @@ static void SetupModMenu() {
 
         DEBUG("Initializing BetterConsole...");
         DEBUG("BetterConsole Version: " BETTERCONSOLE_VERSION);
-        static UINT(*OLD_GetRawInputData)(HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) = nullptr;
-        static decltype(OLD_GetRawInputData) FAKE_GetRawInputData = [](HRAWINPUT hri, UINT cmd, LPVOID data, PUINT data_size, UINT hsize) -> UINT {
-                auto ret = OLD_GetRawInputData(hri, cmd, data, data_size, hsize);
-                if (data == NULL) return ret;
-                 
-                if (cmd == RID_INPUT) {
-                        auto input = (RAWINPUT*)data;
-
-                        if (input->header.dwType == RIM_TYPEKEYBOARD) {
-                                auto keydata = input->data.keyboard;
-                                if (keydata.Message == WM_KEYDOWN || keydata.Message == WM_SYSKEYDOWN) {
-                                        if (HotkeyReceiveKeypress(keydata.VKey)) {
-                                                goto HIDE_INPUT_FROM_GAME;
-                                        }
-                                }
-                        }
-
-                        if (should_show_ui == false) return ret;
-
-                        HIDE_INPUT_FROM_GAME:
-                        //hide input from the game when shouldshowui is true and data is not null
-                        input->header.dwType = RIM_TYPEHID; //game ignores typehid messages
-                }
-                return ret;
-        };
+        
         OLD_GetRawInputData = (decltype(OLD_GetRawInputData)) API.Hook->HookFunctionIAT("user32.dll", "GetRawInputData", (FUNC_PTR)FAKE_GetRawInputData);
         DEBUG("Hook GetRawInputData: %p", OLD_GetRawInputData);
 
@@ -486,7 +414,7 @@ static void SetupModMenu() {
         LoadSettingsRegistry();
 }
 
-extern "C" __declspec(dllexport) void SFSEPlugin_Load(const SFSEInterface*) {}
+extern "C" __declspec(dllexport) bool SFSEPlugin_Load(const SFSEInterface*) { return true; }
 
 
 static int OnBetterConsoleLoad(const struct better_api_t* api) {
@@ -515,7 +443,7 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE self, DWORD fdwReason, LPVOID) {
                 static bool RunHooksOnlyOnce = true;
                 ASSERT(RunHooksOnlyOnce == true); //i want to know if this assert ever gets triggered
                 //while (!IsDebuggerPresent()) Sleep(100);
-
+ 
                 self_module_handle = self;
 
                 // just hook this one function the game needs to display graphics, then lazy hook the rest when it's called later
@@ -616,8 +544,19 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 ImGui_ImplWin32_Init(hWnd);
         }
 
-        if (uMsg == WM_KEYDOWN && wParam == VK_F1) {
-                //OnHotheyActivate(0); // this is for debugging only
+        /* for debugging */
+        if (!OLD_GetRawInputData && uMsg == WM_KEYDOWN) {
+                // allow toggling the ui in the test renderer
+                if (wParam == VK_F1) {
+                        OnHotheyActivate(0);
+                }
+
+                if (wParam == VK_F2) {
+                        const auto Parser = GetParserAPI();
+                        float f = 0;
+                        Parser->ParseFloat(" \t \r \n \v  +1.67e-4", &f);
+                        DEBUG("f: %f", f);
+                }
         }
 
         if (uMsg == WM_SIZE || uMsg == WM_CLOSE) {

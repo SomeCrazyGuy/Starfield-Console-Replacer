@@ -251,7 +251,7 @@ void MyHotkeyCallback(uintptr_t userdata) {
 // The following allows the example plugin to also be an sfse plugin
 // more details are in the sfse section
 // Step 1) Export this struct so sfse knows your DLL is compatible
-DLLEXPORT SFSEPluginVersionData SFSEPlugin_Version = {
+BC_DLLEXPORT SFSEPluginVersionData SFSEPlugin_Version = {
         1,     // SFSE api version, 1 is current
         1,     // Plugin api version, 1 is current
         "BetterConsole Example Plugin",  // Mod/Plugin Name (limit: 255 characters)
@@ -264,7 +264,7 @@ DLLEXPORT SFSEPluginVersionData SFSEPlugin_Version = {
         // 1 - mod does not care if game structs change
         // Compatible Game Versions:
         {                        // A list of up to 15 game versions
-        MAKE_VERSION(1, 11, 36), // This means compatible with 1.11.36
+        BC_MAKE_VERSION(1, 11, 36), // This means compatible with 1.11.36
         0                        // The list must be terminated with 0
         },                       // if address & structure independent
         // then this is minimum version required
@@ -274,7 +274,7 @@ DLLEXPORT SFSEPluginVersionData SFSEPlugin_Version = {
 
 // Step 2) Export this function so sfse knows to load your dll.
 //         Doing anything inside the function is optional.
-DLLEXPORT bool SFSEPlugin_Load(const SFSEInterface* sfse) { return true; }
+BC_DLLEXPORT bool SFSEPlugin_Load(const SFSEInterface* sfse) { return true; }
 
 
 // Need to undef this for the example because the example needs to include itself
@@ -286,10 +286,23 @@ DLLEXPORT bool SFSEPlugin_Load(const SFSEInterface* sfse) { return true; }
 #ifndef BETTERAPI_API_H /* Prevent multiple includes of same file */
 #define BETTERAPI_API_H
 
-// This is used to convert version numbers like 1.3.1 into a single number
-// that can be compared, follows the same scheme as sfse and the game
-#define MAKE_VERSION(MAJOR, MINOR, BUILD) ((((MAJOR)&0xFF)<<24)|(((MINOR)&0xFF)<<16)|(((BUILD)&0xFFF)<<4))
+// These macros are used to control the exporting of symbols both
+// for the internal and public api for c and c++
+#ifndef BC_EXPORT
+ #ifdef __cplusplus
+  #define BC_EXPORT extern "C"
+ #else
+  #define BC_EXPORT extern
+ #endif // __cplusplus
+#endif // BC_EXPORT
+#ifndef BC_DLLEXPORT
+ #define BC_DLLEXPORT BC_EXPORT __declspec(dllexport)
+#endif // BC_DLLEXPORT
 
+// This is used to convert version numbers like 1.3.1 into a single number
+// that can be compared, follows the same scheme as sfse and the game's
+// version numbers
+#define BC_MAKE_VERSION(MAJOR, MINOR, BUILD) ((((MAJOR)&0xFF)<<24)|(((MINOR)&0xFF)<<16)|(((BUILD)&0xFFF)<<4))
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -312,7 +325,7 @@ DLLEXPORT bool SFSEPlugin_Load(const SFSEInterface* sfse) { return true; }
 // variable BETTERAPI_FEATURE_LEVEL to a specific release of
 // BetterConsole like MAKE_VERSION(1,4,1) for version 1.4.1
 #ifndef BETTERAPI_FEATURE_LEVEL
-#define BETTERAPI_FEATURE_LEVEL MAKE_VERSION(0, 0, 0)
+#define BETTERAPI_FEATURE_LEVEL BC_MAKE_VERSION(0, 0, 0)
 #endif // BETTERAPI_FEATURE_LEVEL
 
 
@@ -401,12 +414,12 @@ DLLEXPORT bool SFSEPlugin_Load(const SFSEInterface* sfse) { return true; }
 #ifdef V
 #error "V is already defined!"
 #endif // V
-#define V(MAJOR, MINOR, PATCH) (MAKE_VERSION(MAJOR, MINOR, PATCH)<=(BETTERAPI_FEATURE_LEVEL))
+#define V(MAJOR, MINOR, PATCH) (BC_MAKE_VERSION(MAJOR, MINOR, PATCH)<=(BETTERAPI_FEATURE_LEVEL))
 
 #ifdef BETTERAPI_DEVELOPMENT_FEATURES
 #pragma message ("BETTERAPI_DEVELOPMENT_FEATURES is defined, any plugin using the api will not be compatible the nexusmods release of betterconsole.")
 #undef BETTERAPI_FEATURE_LEVEL
-#define BETTERAPI_FEATURE_LEVEL MAKE_VERSION( 9, 9, 9)
+#define BETTERAPI_FEATURE_LEVEL BC_MAKE_VERSION( 9, 9, 9)
 #endif
 
 
@@ -485,6 +498,10 @@ typedef uint32_t LogBufferHandle;
 // the C standard only lets you cast a function pointer to another
 // function pointer. This also helps document the API better.
 typedef void (*FUNC_PTR)(void);
+
+
+// Opaque handle for the csv file parser
+typedef struct CSVFile CSVFile;
 
 
 
@@ -675,8 +692,7 @@ struct config_api_t {
         // this way you can initialize all variables to a default value
         void (*ConfigU32)(ConfigAction action, const char* key_name, uint32_t* value);
 
-#ifdef BETTERAPI_DEVELOPMENT_FEATURES
-        // dev - 1.4.0
+        // v1.4.1
         // read, write, and edit for string values
         // `in_out_buffer` is a pointer to a buffer that will be read, written, or edited
         // `buffer_size` is the length of the bufer in bytes
@@ -685,19 +701,17 @@ struct config_api_t {
         // and sets "in_out_buffer[buffer_size - 1] = 0" on action write
         void (*ConfigString)(ConfigAction action, const char* key_name, char* in_out_buffer, uint32_t buffer_size);
 
-
-        // dev - 1.4.1
+        // v1.4.2
         // read, write, and edit for boolean values
         // `out_value` is a pointer to a boolean variable that will be read, written, or edited
         void (*ConfigBool)(ConfigAction action, const char* key_name, bool* out_value);
 
-        // dev - 1.4.1
+        // v1.4.2
         // read, write, and edit for float values
         // `out_value` is a pointer to a float variable that will be read, written, or edited
         void (*ConfigFloat)(ConfigAction action, const char* key_name, float* out_value);
 
-
-        // dev - 1.4.1
+        // v1.4.2
         // read or write fixed size arbitrary data
         // arbitrary data is stored hex encoded in the config file, this config option should be used
         // to store larger or more complex data like POD structs
@@ -707,7 +721,6 @@ struct config_api_t {
         // since config functions do not allocate, returning false on a read event means that `out_data`
         // may have been overwritten with garbage values and should not be trusted
         bool (*ConfigData)(ConfigAction action, const char* key_name, void* out_data, uint32_t data_size);
-#endif // BETTERAPI_DEVELOPMENT_FEATURES
 };
 
 
@@ -744,13 +757,6 @@ struct hook_api_t {
 
         // !EXPERIMENTAL API! AOB scan the exe memory and return the first match 
         void* (*AOBScanEXE)(const char* signature);
-
-#ifdef BETTERAPI_DEVELOPMENT_FEATURES
-        // build a wall so high that nobody can see the top from the highest ladder
-        // https://devblogs.microsoft.com/oldnewthing/20110310-00/?p=11253
-        void** (*LiterallyReplaceEntireVtable)(void*** ppClassInstance, uint32_t method_count);
-#endif // BETTERAPI_DEVELOPMENT_FEATURES
-
 };
 
 
@@ -902,7 +908,6 @@ struct simple_draw_t {
         // place multiple simpledraw elements on the same line
         void (*SameLine)();
 
-#ifdef BETTERAPI_DEVELOPMENT_FEATURES
         // Draw a radiobutton, returns true if the button was selected this frame
         // 
         // `selection_group` is the group this radiobutton belongs to.
@@ -914,6 +919,7 @@ struct simple_draw_t {
         //                   first button in a group. no need for a static variable
         bool (*RadioButton)(const char* text, uint32_t* selection_group, uint32_t* current_id);
 
+
         // Show a small button that invokes the "open" shell action on click
         //
         // `display_text` This is the text shown inside the button
@@ -921,7 +927,24 @@ struct simple_draw_t {
         // `url_or_path` This is the link or file path to open using the default
         //               handler (like a web browser or notepad) 
         void (*LinkButton)(const char* display_text, const char* url_or_path);
-#endif
+
+
+        // Draw a slider, returns true if the slider was changed this frame
+        // 
+        // `value`      is the current value
+        // `min`        is the minimum value \___/ if both are 0 then
+        // `max`        is the maximum value /   \ the slider is unbounded
+        // `format`     is the format string for the value, if null it uses "%d"
+        bool (*SliderInt)(const char* text, int* value, int min, int max, const char* format);
+
+
+        // Draw a slider, returns true if the slider was changed this frame
+        // 
+        // `value`      is the current value
+        // `min`        is the minimum value \___/ if both are 0.f then
+        // `max`        is the maximum value /   \ the slider is unbounded
+        // `format`     is the format string for the value, if null it uses "%f"
+        bool (*SliderFloat)(const char* name, float* value, float min, float max, const char* format);
 };
 
 
@@ -986,7 +1009,7 @@ struct std_api_t {
 //                 19) Game Console API
 ///////////////////////////////////////////////////////////////////////////////
 
-struct console_api_t {
+struct gamehook_api_t {
         // run `command` on the in-game console
         // max length of `command` is limited to 512 bytes by the game
         // NOTE: the game wont run console commands until the main menu
@@ -1001,24 +1024,25 @@ struct console_api_t {
         // Version 1.4.1 - copy command to internal buffer to take const char*
         //                 and string literals, not API breaking for old plugins
         //                 running on newer betterconsole
-#if V(1,4,1)
         void (*RunCommand)(const char* command);
-#else
-        void (*RunCommand)(char* command);
-#endif
 
 #if BETTERAPI_DEVELOPMENT_FEATURES
-        // Pause or unpause the game
-        // 
-        // `paused` true to pause the game
-        //          false to unpause
-        void (*SetGamePaused)(bool paused);
+        // get a pointer to a form using a string identifier
+        // using this scheme: https://falloutck.uesp.net/wiki/Template:INI:Papyrus:sTraceStatusOfQuest
+        // this function pointer could be NULL if the hook was not created
+        void* (*GetFormByID)(const char* form_identifier);
+
+        // get the name or editor id of a form
+        // this function pointer could be NULL if the hook not created
+        const char* (*GetFormName)(void* form);
+
+        // get the game paused flag, returns NULL if not supported
+        bool* (*GetGamePausedFlag)();
 #endif
 };
 
 
-#if BETTERAPI_DEVELOPMENT_FEATURES
-// 1.4.1 - this api is experimental
+#if V(1,4,2)
 ///////////////////////////////////////////////////////////////////////////////
 //                 20) Wrapped Windows API
 ///////////////////////////////////////////////////////////////////////////////
@@ -1045,99 +1069,127 @@ struct windows_api_t {
         // MessageBox - see https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messageboxa
         void (*MessageBoxUTF)(const char* message, const char* window_title);
 
-        // returns true if debugger is attached
-        // IsDebuggerPresent - see https://docs.microsoft.com/en-us/windows/win32/api/dbghelp/nf-dbghelp-isdebuggerpresent
-        bool (*IsDebuggerPresent)();
-
-        // Sleep - see https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-sleep
-        void (*Sleep)(uint32_t milliseconds);
-
         // returns NULL on error
         // GetProcAddress - see https://docs.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getprocaddress
         void* (*GetProcAddress)(void* module_name, const char* function_name);
+
+        // Utility function to wait for a debugger to attach to the process
+        // returns false if the timeout was reached
+        bool (*WaitForDebugger)(uint32_t timeout_ms);
 };
 #endif
 
 
-#if BETTERAPI_DEVELOPMENT_FEATURES
-///////////////////////////////////////////////////////////////////////////////
-//                 21) File I/O API
-///////////////////////////////////////////////////////////////////////////////
-struct file_io_api_t {
-        // create a directory if it does not exist
-        // returns false on error
-        // `directory_name` is the name of the directory
-        // `relative_dir` is one of the following:
-        //      NULL - `directory_name` is an absolute path
-        //      "Starfield" - `directory_name` is relative to the folder containing starfield.exe
-        //      "BetterConsole" - `directory_name` is relative to the folder containing BetterConsole
-        bool (*CreateDirectory)(const char* relative_dir, const char* directory_name);
-
-        // open a file
-        // returns NULL on error or a file handle (as void*) on success
-        // `relative_dir` is one of the following:
-        //      NULL - `filename` is an absolute path
-        //      "Starfield" - `filename` is relative to the folder containing starfield.exe
-        //      "BetterConsole" - `filename` is relative to the folder containing BetterConsole
-        // `mode` is one of the following:
-        //      'r' - the file is opened read only
-        //      'w' - the file is opened for reading and writing (the file is truncated if it already exists)
-        //      'a' - the file is opened for reading and writing (the file is appended if it already exists)
-        void* (*Open)(const char* relative_dir, const char* filename, char mode);
-
-        // close a file
-        // returns false on error
-        // `file` is a file handle (as void*)
-        bool (*Close)(void* file);
-
-        // get the size of a file
-        // returns false on error
-        // `file` is a file handle (as void*)
-        // `size` is a pointer to a uint64_t that receives the file size
-        bool (*Size)(void* file_handle, uint64_t* size);
-
-        // seek to an offset in a file
-        // returns false on error
-        // `file` is a file handle (as void*)
-        // `offset` is the offset to seek to
-        bool (*Seek)(void* file_handle, int64_t offset);
-
-        // tell the current offset in a file
-        // returns false on error
-        // `file` is a file handle (as void*)
-        // `offset` is a pointer to a uint64_t that receives the offset
-        bool (*Tell)(void* file_handle, uint64_t* offset);
-
-        // write to a file
-        // returns false on error
-        // `file` is a file handle (as void*)
-        // `buffer` is a pointer to the data to write
-        // `size` is the number of bytes to write
-        bool (*Write)(void* file_handle, const void* buffer, uint32_t size);
+// this is the api for parsing csv files
+struct csv_api_t {
+        // Load a csv file
+        // returns NULL on error
+        // `filename` is the name of the csv file
+        CSVFile* (*Load)(const char* filename);
 
 
-        // read from a file
-        // returns false on error
-        // `file` is a file handle (as void*)
-        // `buffer` is a pointer to the data to read
-        // `size` is the number of bytes to read
-        bool (*Read)(void* file_handle, void* buffer, uint32_t size);
+        // Close a csv file and free its memory
+        // `csv` is a pointer to the csv structure
+        void (*Close)(CSVFile* csv);
 
 
-        // flush any unwritten data to disk
-        // returns false on error
-        // `file` is a file handle (as void*)
-        bool (*Flush)(void* file_handle);
+        // Info about the csv file
+        // `csv` is a pointer to the csv structure
+        // `out_rows` receives the number of rows
+        // `out_columns` receives the number of columns
+        void(*Info)(const CSVFile* csv, uint32_t* out_rows, uint32_t* out_columns);
 
-        // formatted write to a file
-        // returns false on error
-        // `file` is a file handle (as void*)
-        // `format` is a printf style format string
-        // NOTE: the internal formatting buffer is 1024 bytes,
-        // attempting to write more than that will result in an error
-        bool (*Print)(void* file_handle, const char* format, ...);
+
+        // Read a cell
+        // `csv` is a pointer to the csv structure
+        // `row` is the row to read
+        // `column` is the column to read
+        // returns a pointer to the cell text or NULL on error
+        const char* (*ReadCell)(const CSVFile* csv, uint32_t row, uint32_t column);
 };
-#endif
+
+
+struct parse_api_t {
+        // parse a utf-8 string as a 64-bit unsigned integer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_u64` receives the parsed value
+        // `as_hex` true to parse the text in hexadecimal (otherwise decimal unless the text starts with 0x)
+        bool (*ParseU64)(const char* str, uint64_t* out_u64, bool as_hex);
+
+
+        // parse a utf-8 string as a 32-bit unsigned integer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_u32` receives the parsed value
+        // `as_hex` true to parse the text in hexadecimal (otherwise decimal unless the text starts with 0x)
+        bool (*ParseU32)(const char* str, uint32_t* out_u32, bool as_hex);
+
+
+        // parse a utf-8 string as a 16-bit unsigned integer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_u16` receives the parsed value
+        // `as_hex` true to parse the text in hexadecimal (otherwise decimal unless the text starts with 0x)
+        bool (*ParseU16)(const char* str, uint16_t* out_u16, bool as_hex);
+
+
+        // parse a utf-8 string as a 8-bit unsigned integer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_u8` receives the parsed value
+        // `as_hex` true to parse the text in hexadecimal (otherwise decimal unless the text starts with 0x)
+        bool (*ParseU8)(const char* str, uint8_t* out_u8, bool as_hex);
+
+
+        // parse a utf-8 string as a 64-bit signed integer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_s64` receives the parsed value
+        // `as_hex` true to parse the text in hexadecimal (otherwise decimal unless the text starts with 0x)
+        bool (*ParseS64)(const char* str, int64_t* out_s64, bool as_hex);
+
+
+        // parse a utf-8 string as a 32-bit signed integer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_s32` receives the parsed value
+        // `as_hex` true to parse the text in hexadecimal (otherwise decimal unless the text starts with 0x)
+        bool (*ParseS32)(const char* str, int32_t* out_s32, bool as_hex);
+
+
+        // parse a utf-8 string as a 16-bit signed integer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_s16` receives the parsed value
+        // `as_hex` true to parse the text in hexadecimal (otherwise decimal unless the text starts with 0x)
+        bool (*ParseS16)(const char* str, int16_t* out_s16, bool as_hex);
+
+
+        // parse a utf-8 string as a 8-bit signed integer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_s8` receives the parsed value
+        // `as_hex` true to parse the text in hexadecimal (otherwise decimal unless the text starts with 0x)    
+        bool (*ParseS8)(const char* str, int8_t* out_s8, bool as_hex);
+
+
+        // parse a utf-8 string as a double
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_double` receives the parsed value
+        bool (*ParseDouble)(const char* str, double* out_double);
+
+
+        // parse a utf-8 string as a float
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_float` receives the parsed value
+        bool (*ParseFloat)(const char* str, float* out_float);
+};
+
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //                 22) BetterConsole API
@@ -1155,45 +1207,21 @@ typedef struct better_api_t {
         const struct callback_api_t* Callback;
         const struct config_api_t* Config;
         const struct std_api_t* Stdlib;
-        const struct console_api_t* Console;
-#if BETTERAPI_DEVELOPMENT_FEATURES
+        const struct gamehook_api_t* Game;
         const struct windows_api_t* Windows;
-        const struct file_io_api_t* FileIO;
-#endif
+        const struct csv_api_t* CSV;
+        const struct parse_api_t* Parse;
 } BetterAPI;
 
 
-// Open to feedback:
-// in the future, instead of having one version of the api
-// and one version of the betterapi struct, pass in a 
-// service locator and resolve dependencies on a more
-// granular level that does not rely on struct layout
-#if BETTERAPI_VERSION > 1
-enum ServiceType {
-        ServiceType_Callback,
-        ServiceType_Hook, 
-        // etc...
+// service locator for a future api implementation
+struct service_locator_t {
+        uint32_t version;
+        uint32_t interface_count;
+        FUNC_PTR (*Find)(const char* mod_name, const char* func_name);
+        bool (*Info)(uint32_t index, const char** mod_name, const char** func_name, FUNC_PTR* func_ptr);
+        bool (*Register)(const char* mod_name, const char* func_name, FUNC_PTR func_ptr);
 };
-
-
-// Get a pointer to an api struct.
-// This allows betterconsole to return different versions of the api
-//      depending on mod compatibility.
-typedef const void* (*BetterServiceLocator)(enum ServiceType type, uint32_t version);
-
-
-//then instead of providing a betterapi pointer, only send the locator and version data:
-DLLEXPORT int BetterConsoleReceiver2(BetterServiceLocator locator, uint32_t betterconsole_api_level) {
-        static better_api_t api;
-        api.Callback = locator(ServiceType_Callback, 0); //something like this?
-        // we could have #defines for BETTERAPI_ENABLE_CONFIG or something
-        // so you only enable the parts of the api that you use, less chance of
-        // breaking compatibility if we only incrementally update unpopular APIs
-        return OnBetterConsoleLoad(&api);
-}
-#endif
-
-
 
 // Dont keep single letter macros around outside this file
 #ifdef V
@@ -1277,15 +1305,11 @@ typedef struct SFSEMessagingInterface_t {
 
 #ifdef BETTERAPI_IMPLEMENTATION
 #undef BETTERAPI_IMPLEMENTATION
-#ifdef __cplusplus
-#define DLLEXPORT extern "C" __declspec(dllexport)
-#else
-#define DLLEXPORT __declspec(dllexport)
-#endif // __cplusplus
+
 static int OnBetterConsoleLoad(const struct better_api_t* betterapi);
 // In a future API version we need to return a value from this function
 // it makes sense to know and log if a mod can't load
-DLLEXPORT void BetterConsoleReceiver(const struct better_api_t* api) {
+BC_DLLEXPORT void BetterConsoleReceiver(const struct better_api_t* api) {
         OnBetterConsoleLoad(api);
 }
 #endif // BETTERAPI_IMPLEMENTATION

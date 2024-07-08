@@ -109,7 +109,9 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile Include="src\broadcast_api.cpp" />
     <ClCompile Include="src\callback.cpp" />
     <ClCompile Include="src\console.cpp" />
+    <ClCompile Include="src\csv_parser.cpp" />
     <ClCompile Include="src\d3d11on12ui.cpp" />
+    <ClCompile Include="src\debug_log.cpp" />
     <ClCompile Include="src\fake_vcruntime140_1.cpp" />
     <ClCompile Include="src\game_hooks.cpp" />
     <ClCompile Include="src\gui.cpp" />
@@ -118,9 +120,11 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClCompile Include="src\log_buffer.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\minhook_unity_build.c" />
+    <ClCompile Include="src\parser.cpp" />
     <ClCompile Include="src\settings.cpp" />
     <ClCompile Include="src\simpledraw.cpp" />
     <ClCompile Include="src\std_api.cpp" />
+    <ClCompile Include="src\winapi.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="betterapi.h" />
@@ -137,7 +141,9 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="src\broadcast_api.h" />
     <ClInclude Include="src\callback.h" />
     <ClInclude Include="src\console.h" />
+    <ClInclude Include="src\csv_parser.h" />
     <ClInclude Include="src\d3d11on12ui.h" />
+    <ClInclude Include="src\debug_log.h" />
     <ClInclude Include="src\game_hooks.h" />
     <ClInclude Include="src\gui.h" />
     <ClInclude Include="src\gui_interface.h" />
@@ -146,9 +152,11 @@ copy /Y "$(OutDir)$(TargetName).dll" "$(OutDir)BetterConsole.asi"</Command>
     <ClInclude Include="src\log_buffer.h" />
     <ClInclude Include="src\main.h" />
     <ClInclude Include="src\minhook_unity_build.h" />
+    <ClInclude Include="src\parser.h" />
     <ClInclude Include="src\settings.h" />
     <ClInclude Include="src\simpledraw.h" />
     <ClInclude Include="src\std_api.h" />
+    <ClInclude Include="src\winapi.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="VersionInfo.rc" />

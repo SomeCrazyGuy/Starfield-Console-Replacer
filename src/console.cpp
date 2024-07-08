@@ -1,13 +1,10 @@
 #include "main.h"
-
-#include <varargs.h>
-#include <vector>
-#include <ctype.h>
-
 #include "game_hooks.h"
 
-#define NUM_HOTKEY_COMMANDS 16
+#include <vector>
+#include <cctype>
 
+#define NUM_HOTKEY_COMMANDS 16
 
 enum class InputMode : uint32_t {
         Command,
@@ -44,8 +41,21 @@ struct Command {
 } HotkeyCommands[NUM_HOTKEY_COMMANDS];
 
 
-static void draw_console_window(void* imgui_context) {
-        (void)imgui_context;
+static void draw_console_window(void*) {
+        if (!(GameHook->ConsoleRun && GameHook->ConsoleOutputHooked)) {
+                if (!GameHook->ConsoleOutputHooked) {
+                        SimpleDraw->Text("Cannot hook console print function.");
+                }
+
+                if (!GameHook->ConsoleRun) {
+                        SimpleDraw->Text("Cannot hook console run function.");
+                }
+
+                SimpleDraw->Text("Incompatible mod loaded or incompatible game version");
+                SimpleDraw->Text("BetterConsole '%s' is compatible with game version '%s'", BETTERCONSOLE_VERSION, COMPATIBLE_GAME_VERSION);
+                return;
+        }
+
 
         static bool ConsoleReadyIgnored = false;
         if (!GameHook->ConsoleReadyFlag && !ConsoleReadyIgnored) {
@@ -56,19 +66,6 @@ static void draw_console_window(void* imgui_context) {
                 return;
         }
 
-        if (!(GameHook->ConsoleRun && GameHook->ConsoleOutputHooked)) {
-                if (!GameHook->ConsoleOutputHooked) {
-                        SimpleDraw->Text("Cannot hook console print function. cannot start console");
-                }
-
-                if (!GameHook->ConsoleRun) {
-                        SimpleDraw->Text("Cannot hook console run function. cannot start console");
-                }
-
-                SimpleDraw->Text("Incompatible mod loaded or incompatible game version");
-                SimpleDraw->Text("BetterConsole '%s' is compatible with game version '%s'", BETTERCONSOLE_VERSION, GAME_VERSION);
-                return;
-        }
 
         static bool GamePausedIgnored = false;
         if (!GameHook->GetGamePausedFlag() && !GamePausedIgnored) {
@@ -101,6 +98,13 @@ static void draw_console_window(void* imgui_context) {
         ImGui::SameLine();
         
         ImGui::SetNextItemWidth(-(ImGui::GetFontSize() * 12.0f));
+
+        static uint32_t line_count = 0;
+        const auto cur_lines = LogBuffer->GetLineCount(GameHook->ConsoleOutput);
+        if (line_count != cur_lines) {
+                line_count = cur_lines;
+                UpdateScroll = true;
+        }
 
         if (UpdateFocus) {
                 ImGui::SetKeyboardFocusHere();
@@ -155,7 +159,10 @@ static void draw_console_window(void* imgui_context) {
                 ASSERT(false && "Invalid command mode");
         }
 
-        UpdateScroll = false;
+        if (UpdateScroll) {
+                ImGui::SetScrollHereY(1.0f);
+                UpdateScroll = false;
+        }
 }
 
 
@@ -274,10 +281,4 @@ extern void setup_console(const BetterAPI* api) {
         Config = API->Config;
         
         IOBuffer[0] = 0;
-}
-
-//probably move this out in the future now that all hooks are in one place
-extern const struct console_api_t* GetConsoleAPI() {
-        static const console_api_t api = { GameHook->ConsoleRun };
-        return &api;
 }

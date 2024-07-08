@@ -226,53 +226,6 @@ static void* AOBScanEXE(const char* signature) {
         return NULL;
 }
 
-/*
-static FUNC_PTR SearchEAT(const void* module_base, const char* export_name) {
-        ASSERT(module_base != NULL);
-
-        //TODO assert module_base is really mapped memory with virtualquery
-        const auto exe = (const unsigned char*)module_base;
-        const auto hdr = (const IMAGE_DOS_HEADER*)exe;
-        const auto nt = (const IMAGE_NT_HEADERS64*)(exe + hdr->e_lfanew);
-        const auto exports = (const IMAGE_EXPORT_DIRECTORY*)(exe + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-        const auto count = (exports->NumberOfFunctions > exports->NumberOfNames) ? exports->NumberOfNames : exports->NumberOfFunctions;
-        const auto functions = (const uint32_t*)(exe + exports->AddressOfFunctions);
-        const auto names = (const uint32_t*)(exe + exports->AddressOfNames);
-
-        for (DWORD i = 0; i < count; ++i) {
-                const auto func_name = (const char*)(exe + names[i]);
-                DEBUG("'%s' == '%s'?", export_name, func_name);
-                if (_stricmp(export_name, func_name) == 0) {
-                        return (FUNC_PTR)(exe + functions[i]);
-                }
-        }
-
-        return nullptr;
-}
-*/
-
-/*
-static FUNC_PTR GetModuleEntrypoint(const void* module_base) {
-        ASSERT(module_base != NULL);
-
-        //TODO assert module_base is really mapped memory with virtualquery
-        const auto exe = (const unsigned char*)module_base;
-        const auto hdr = (const IMAGE_DOS_HEADER*)exe;
-        const auto nt = (const IMAGE_NT_HEADERS64*)(exe + hdr->e_lfanew);
-
-        return (FUNC_PTR)(exe + nt->OptionalHeader.AddressOfEntryPoint);
-}
-*/
-
-
-
-static void** LiterallyReplaceEntireVtable(void*** ppClassInstance, uint32_t method_count) {
-        void** ret = (void**)malloc(sizeof(void*) * method_count);
-        memcpy(ret, **ppClassInstance, sizeof(void*) * method_count);
-        **ppClassInstance = ret;
-        return ret;
-}
-
 
 static constexpr struct hook_api_t HookAPI {
         &HookFunction,
@@ -282,7 +235,6 @@ static constexpr struct hook_api_t HookAPI {
         &GetProcAddressFromIAT,
         &HookFunctionIAT,
         &AOBScanEXE,
-        &LiterallyReplaceEntireVtable
 };
 
 extern constexpr const struct hook_api_t* GetHookAPI() {

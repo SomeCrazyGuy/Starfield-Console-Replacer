@@ -1,5 +1,6 @@
 #include "main.h"
-
+#include <Windows.h>
+#include <shellapi.h>
 #include <ctype.h>
 
 static void simple_separator() {
@@ -267,6 +268,28 @@ static bool simple_radio(const char* text, uint32_t* group_id, uint32_t* button_
 }
 
 
+static void simple_linkbutton(const char* text, const char* url) {
+        if (ImGui::Button(text)) {
+                ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+        }
+        if (ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::TextUnformatted(url);
+                ImGui::EndTooltip();
+        }
+}
+
+
+static bool simple_slider_int(const char* name, int* value, int min, int max, const char* format) {
+        return ImGui::SliderScalar(name, ImGuiDataType_S32, value, (min | max) ? &min : NULL, (min | max)? &max : NULL, format, ImGuiSliderFlags_AlwaysClamp);
+}
+
+
+static bool simple_slider_float(const char* name, float* value, float min, float max, const char* format) {
+return ImGui::SliderScalar(name, ImGuiDataType_Float, value, (min == max == 0.f) ? &min : NULL, (min == max == 0.f) ? &max : NULL, format, ImGuiSliderFlags_AlwaysClamp);
+}
+
+
 static constexpr simple_draw_t SimpleDraw {
         simple_separator,
         simple_text,
@@ -289,7 +312,10 @@ static constexpr simple_draw_t SimpleDraw {
         simple_button_bar,
         simple_tip,
         simple_sameline,
-        simple_radio
+        simple_radio,
+        simple_linkbutton,
+        simple_slider_int,
+        simple_slider_float
 };
 
 

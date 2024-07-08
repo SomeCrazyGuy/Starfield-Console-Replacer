@@ -137,16 +137,20 @@ extern void DX11_InitializeOrRender(void* dx12_swapchain, void* dx12_commandqueu
         }
 
         const auto swapchain = (IDXGISwapChain3*)dx12_swapchain;
-
         const auto index = swapchain->GetCurrentBackBufferIndex();
-        ASSERT(index < g_buffercount);
+
+        if (index >= g_buffercount) {
+                DX11_ReleaseIfInitialized();
+                return;
+        }
+
         const auto b = &Buffers[index];
 
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        draw_gui(); //from gui.h
+        draw_gui(); //from gui.h, all imgui drawing happens here
 
         ImGui::Render();
         g_d3d11on12device->AcquireWrappedResources(&b->d3d11WrappedBackBuffer, 1);
