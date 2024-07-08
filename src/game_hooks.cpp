@@ -9,8 +9,11 @@ static const auto HookAPI = GetHookAPI();
 static void (*Game_ConsoleRun)(void* consolemgr, char* cmd) = nullptr;
 static void(*Game_ConsolePrintV)(void* consolemgr, const char* fmt, va_list args) = nullptr;
 static void(*Game_StartingConsoleCommand)(void* A, uint32_t* type) = nullptr;
+static unsigned char* is_game_paused_address = nullptr;
 
 static const auto LogBuffer = GetLogBufferAPI();
+
+static struct gamehook_api_t  GameHookAPI = {};
 
 static GameHookData HookData{};
 
@@ -67,33 +70,14 @@ static bool* GetGamePausedFlag() {
         static bool* flag_ptr = nullptr;
         if (flag_ptr) return flag_ptr;
 
-        static bool func_addr_initialized = false;
-        static unsigned char* func_addr = nullptr;
-
-        if (func_addr_initialized && func_addr == nullptr) return nullptr;
-
-        DEBUG("Hooking is_game_paused function");
-        func_addr = (unsigned char*)GetHookAPI()->AOBScanEXE(
-                "48 8b 0d ?? ?? ?? ?? " // RCX,QWORD PTR [rip+0x????????]
-                "80 79 ?? 00 "          // CMP BYTE PTR [rcx+0x??],0x00 
-                "0f 94 c0 "             // SETZ AL (AL = ZF)
-                "88 41 ?? "             // MOV BYTE PTR [RCX + 0x??],AL
-                "b0 01 "                // MOV AL,0x1
-                "C3"                    // RET
-        );
-        func_addr_initialized = true;
-
-        if (!func_addr) {
-                DEBUG("is_game_paused function not found");
-                return nullptr;
-        }
+        if (!is_game_paused_address) return nullptr;
 
         uint32_t offset;
         uint8_t displacement;
-        memcpy(&offset, &func_addr[3], sizeof(uint32_t));
-        memcpy(&displacement, &func_addr[9], sizeof(uint8_t));
+        memcpy(&offset, &is_game_paused_address[3], sizeof(uint32_t));
+        memcpy(&displacement, &is_game_paused_address[9], sizeof(uint8_t));
         // 7 is because RIP relative displacement is calculated from the following instruction
-        const auto ptr1 = (unsigned char**)(func_addr + offset + 7);
+        const auto ptr1 = (unsigned char**)(is_game_paused_address + offset + 7);
 
         if (*ptr1 == nullptr) {
                 DEBUG("is_game_paused data not ready");
@@ -158,6 +142,17 @@ extern void GameHook_Init() {
                 HookData.ConsoleOutputHooked = true;
         }
 
+
+        DEBUG("Hooking is_game_paused");
+        is_game_paused_address = (unsigned char*)GetHookAPI()->AOBScanEXE(
+                "48 8b 0d ?? ?? ?? ?? " // RCX,QWORD PTR [rip+0x????????]
+                "80 79 ?? 00 "          // CMP BYTE PTR [rcx+0x??],0x00 
+                "0f 94 c0 "             // SETZ AL (AL = ZF)
+                "88 41 ?? "             // MOV BYTE PTR [RCX + 0x??],AL
+                "b0 01 "                // MOV AL,0x1
+                "C3"                    // RET
+        );
+
         DEBUG("Hooking OnStartingConsoleCommand");
         auto OldStartingConsoleCommand = (FUNC_PTR)HookAPI->AOBScanEXE(
                 "40 53 "        // PUSH RBX
@@ -210,4 +205,15 @@ extern void GameHook_Init() {
         if (!HookData.GetFormName) {
                 DEBUG("Failed to find GetFormName");
         }
+
+        GameHookAPI = decltype(GameHookAPI) {
+                HookData.ConsoleRun,
+                HookData.GetFormByID,
+                HookData.GetFormName,
+                HookData.GetGamePausedFlag
+        };
+}
+
+BC_EXPORT const struct gamehook_api_t* GetGameHookAPI() {
+        return &GameHookAPI;
 }
