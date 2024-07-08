@@ -439,7 +439,7 @@ static void ConfigWriteEscapedString(const char *in_unescaped_string) {
 
         // insert escape sequence so that the parser doesnt
         // trim whitespace unintentionally
-        BufferedOutputWrite("\"\n");
+        BufferedOutputWrite("\"");
 }
 
 
@@ -461,6 +461,7 @@ static void ConfigString(ConfigAction action, const char* key_name, char* out_bu
                 out_buffer[buffer_size - 1] = 0; //now we can assume null termination
                 ConfigWriteKey(key_name);
                 ConfigWriteEscapedString(out_buffer);
+                BufferedOutputWrite("\n"); //move to next line
         }
         else if (action == ConfigAction_Edit) {
                 ImGui::InputText(key_name, out_buffer, buffer_size);
@@ -468,10 +469,104 @@ static void ConfigString(ConfigAction action, const char* key_name, char* out_bu
 }
 
 
+static void ConfigBool(ConfigAction action, const char* key_name, bool* out_value) {
+        if (action == ConfigAction_Read) {
+                const auto value = ConfigLookupKey(key_name);
+                if (value) {
+                        *out_value = *value == '1';
+                }
+        }
+        else if (action == ConfigAction_Write) {
+                ConfigWriteKey(key_name);
+                BufferedOutputWrite((*out_value) ? "1" : "0");
+                BufferedOutputWrite("\n"); //move to next line
+        }
+        else if (action == ConfigAction_Edit) {
+                SimpleDraw->Checkbox(key_name, out_value);
+        }
+}
+
+static void ConfigFloat(ConfigAction action, const char* key_name, float* out_value) {
+        if (action == ConfigAction_Read) {
+                const auto value = ConfigLookupKey(key_name);
+                if (value) {
+                        *out_value = strtof(value, nullptr);
+                }
+        }
+        else if (action == ConfigAction_Write) {
+                ConfigWriteKey(key_name);
+                char fmt[32];
+                snprintf(fmt, sizeof(fmt), "%f\n", *out_value);
+                BufferedOutputWrite(fmt);
+        }
+        else if (action == ConfigAction_Edit) {
+                SimpleDraw->DragFloat(key_name, out_value, 0.f, 0.f);
+        }
+}
+
+
+static bool ConfigReadData(const char* in_data, char* out_buffer, uint32_t buffer_size) {
+        static unsigned char lookup[64] = { 0 };
+
+        if (!lookup[0]) {
+                // intentionally repeating 0-9
+                constexpr const char const hexchars[] = "0123456789ABCDEF0123456789abcdef";
+                memset(lookup, 255, sizeof(lookup));
+                for (unsigned i = 0; i < sizeof(hexchars); i++) {
+                        lookup[hexchars[i] - '0'] = i & 0xF;
+                }
+        }
+
+        const char* s = in_data;
+        for (uint32_t i = 0; i < buffer_size; i++) {
+                const unsigned char c1 = (unsigned char)*s++ - '0';
+                const unsigned char c2 = (unsigned char)*s++ - '0';
+                const unsigned char v1 = lookup[c1 & 63];
+                const unsigned char v2 = lookup[c2 & 63];
+                if ((c1 | c2 | v1 | v2) & 192) return false; //in_data has invalid chars
+                out_buffer[i] = v1 << 4 | v2;
+        }
+
+        return *s == 0;
+}
+
+
+static void ConfigWriteData(const char* in_data, uint32_t data_size) {
+        static const char* const hex{ "0123456789ABCDEF" };
+        for (uint32_t i = 0; i < data_size; i++) {
+                const auto c = (unsigned char)in_data[i];
+                char byte[3];
+                byte[0] = hex[(c >> 4) & 0xF];
+                byte[1] = hex[c & 0xF];
+                byte[2] = 0;
+                BufferedOutputWrite(hex);
+        }
+}
+
+
+static bool ConfigData(ConfigAction action, const char* key_name, void* out_data, uint32_t data_size) {
+        if (action == ConfigAction_Read) {
+                const auto value = ConfigLookupKey(key_name);
+                if (value) {
+                        return ConfigReadData(value, (char*)out_data, data_size);
+                }
+        }
+        else if (action == ConfigAction_Write) {
+                ConfigWriteKey(key_name);
+                ConfigWriteData((char*)out_data, data_size);
+                BufferedOutputWrite("\n"); //move to next line
+                return true;
+        } 
+        return true;
+}
+
+
 static constexpr const struct config_api_t Config = {
-        //ConfigLookupKey,
         ConfigU32,
-        ConfigString
+        ConfigString,
+        ConfigBool,
+        ConfigFloat,
+        ConfigData
 };
 
 
@@ -524,7 +619,7 @@ extern void draw_settings_tab() {
         }
 
         static uint32_t selection = 0;
-        SimpleDraw->HBoxLeft(0.3, 12.f);
+        SimpleDraw->HBoxLeft(0.f, 12.f);
         if (SimpleDraw->Button("Save Configuration")) {
                 SaveSettingsRegistry(); //TODO: this doesnt get the hotkeys
         }
