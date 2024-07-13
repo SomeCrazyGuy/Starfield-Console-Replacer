@@ -72,46 +72,90 @@ static CSVFile* CSV_Load(const char* filename) {
         char* csv = ret->file_buffer;
         std::vector<uint32_t> cells;
         while (csv < end) {
-                if (cell_start) {
-                        cell_start = false;
-                        cells.push_back((uint32_t)(csv - start));
-                } else if (*csv == '\n') {
-                        if (columns && !in_quotes) {
+                if (*csv == '\r' && !in_quotes) {
+                        if (*(csv + 1) == '\n') {
+                                //DEBUG("unquoted CRLF");
                                 *csv = '\0';
-                                ++lines;
-                                ++columns;
-                                if (!ret->column_count) {
-                                        ret->column_count = columns;
-                                }
-                                ASSERT(columns == ret->column_count);
-                                columns = 0;
-                                cell_start = true;
+                                ++csv;
                         }
+                        else {
+                                //DEBUG("unquoted CR");
+                        }
+                }
+
+                if (*csv == '\n') {
+                        if (!in_quotes) {
+                                *csv = '\0';
+                                if (columns) {
+                                        ++lines;
+                                        ++columns;
+                                        if (!ret->column_count) {
+                                                ret->column_count = columns;
+                                        }
+                                        //DEBUG("unquoted newline with %u columns", columns);
+                                        if (columns != ret->column_count) {
+                                                DEBUG("Column count mismatch: %u != %u", columns, ret->column_count);
+                                                goto PARSE_ERROR;
+                                        }
+                                        columns = 0;
+                                        cell_start = true;
+                                }
+                                else {
+                                        //DEBUG("Unquoted newline with no columns");
+                                }
+                        }
+                        else {
+                                //DEBUG("Quoted newline");
+                        }
+                }
+                else if (cell_start) {
+                        const auto pos = (uint32_t)(csv - start);
+                        //DEBUG("Cell Start at %u (%c)", pos, *csv);
+                        cell_start = false;
+                        cells.push_back(pos);
                 }
                 else if (*csv == ',') {
                         if (!in_quotes) {
+                                //DEBUG("Unquoted comma");
                                 *csv = '\0';
                                 ++columns;
                                 cell_start = true;
+                        }
+                        else {
+                                //DEBUG("Quoted Comma");
                         }
                 }
                 else if (*csv == '"') {
                         if (in_quotes) {
                                 if (*(csv + 1) == '"') {
+                                        //DEBUG("Escaped quote");
                                         ++csv;
                                 }
                                 else {
+                                        //DEBUG("Closing quote");
                                         in_quotes = false;
                                 }
                         }
                         else {
+                                //DEBUG("Starting Quote");
                                 in_quotes = true;
+                        }
+                }
+                else {
+                        if (in_quotes) {
+                                //DEBUG("in_quotes: (%c)", *csv);
+                        }
+                        else {
+                                //DEBUG("Other Unquoted: (%c)", *csv);
                         }
                 }
 
                 ++csv;
         }
-        ASSERT(in_quotes == false);
+        if (in_quotes) {
+                DEBUG("Unterminated quote");
+                goto PARSE_ERROR;
+        }
 
         // handle if the file did not end in a newline
         if (columns) {
@@ -126,6 +170,12 @@ static CSVFile* CSV_Load(const char* filename) {
         memcpy(ret->cells, &cells[0], ret->cell_count * sizeof(uint32_t));
 
         return ret;
+
+PARSE_ERROR:
+        free(ret->file_buffer);
+        memset(csv, 0, sizeof(*csv));
+        free(csv);
+        return NULL;
 }
 
 
@@ -163,3 +213,6 @@ extern const struct csv_api_t* GetCSVAPI() {
         };
         return &CSVAPI;
 }
+
+
+

@@ -105,7 +105,18 @@ static bool ParseNumber(const char* str, void* out_val, unsigned flags) {
                                 frac_len = 0;
                                 continue;
                         }
-                        else {
+                        else if (
+                                (c == ' ')  ||
+                                (c == '\t') ||
+                                (c == '\r') ||
+                                (c == '\n') ||
+                                (c == '\v')
+                                ) {
+                                // break on whitespace
+                                break;
+                        } else {
+                                // should we error here?
+                                // maybe only if no characters were parsed?
                                 goto INVALID_CHARACTER;
                         }
                 }
