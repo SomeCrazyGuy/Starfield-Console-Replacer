@@ -22,9 +22,9 @@
 
 
 #define BETTERCONSOLE_VERSION "1.4.3"
-#define COMPATIBLE_GAME_VERSION "1.12.36"
+#define COMPATIBLE_GAME_VERSION "1.13.61"
 
-constexpr uint32_t GAME_VERSION = BC_MAKE_VERSION(1, 12, 36);
+constexpr uint32_t GAME_VERSION = BC_MAKE_VERSION(1, 13, 61);
 
 struct ModMenuSettings {
         uint32_t FontScaleOverride = 0;
