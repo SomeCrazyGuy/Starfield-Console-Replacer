@@ -85,6 +85,9 @@ static void LogBufferAppend(LogBufferHandle handle, const char* line) {
 	auto& l = Logs[handle];
 	auto offset = l.buffer.size();
 	l.buffer.append(line);
+	if (l.buffer.back() == '\n') {
+                l.buffer.pop_back();
+	}
 	l.buffer += '\0';
 	l.lines.push_back((uint32_t)offset);
 	if (l.logfile) {

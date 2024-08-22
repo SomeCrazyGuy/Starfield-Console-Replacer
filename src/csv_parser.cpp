@@ -83,6 +83,30 @@ static CSVFile* CSV_Load(const char* filename) {
                         }
                 }
 
+                
+                if (*csv == '"') {
+                        if (in_quotes) {
+                                if (*(csv + 1) == '"') {
+                                        //DEBUG("Escaped quote");
+                                        ++csv;
+                                }
+                                else {
+                                        //DEBUG("Closing quote");
+                                        in_quotes = false;
+                                }
+                        }
+                        else {
+                                //DEBUG("Starting Quote");
+                                in_quotes = true;
+                        }
+                }
+                else if (cell_start) {
+                        const auto pos = (uint32_t)(csv - start);
+                        //DEBUG("Cell Start at %u (%c)", pos, *csv);
+                        cell_start = false;
+                        cells.push_back(pos);
+                }
+
                 if (*csv == '\n') {
                         if (!in_quotes) {
                                 *csv = '\0';
@@ -107,14 +131,7 @@ static CSVFile* CSV_Load(const char* filename) {
                         else {
                                 //DEBUG("Quoted newline");
                         }
-                }
-                else if (cell_start) {
-                        const auto pos = (uint32_t)(csv - start);
-                        //DEBUG("Cell Start at %u (%c)", pos, *csv);
-                        cell_start = false;
-                        cells.push_back(pos);
-                }
-                else if (*csv == ',') {
+                } else if (*csv == ',') {
                         if (!in_quotes) {
                                 //DEBUG("Unquoted comma");
                                 *csv = '\0';
@@ -123,22 +140,6 @@ static CSVFile* CSV_Load(const char* filename) {
                         }
                         else {
                                 //DEBUG("Quoted Comma");
-                        }
-                }
-                else if (*csv == '"') {
-                        if (in_quotes) {
-                                if (*(csv + 1) == '"') {
-                                        //DEBUG("Escaped quote");
-                                        ++csv;
-                                }
-                                else {
-                                        //DEBUG("Closing quote");
-                                        in_quotes = false;
-                                }
-                        }
-                        else {
-                                //DEBUG("Starting Quote");
-                                in_quotes = true;
                         }
                 }
                 else {
@@ -164,7 +165,10 @@ static CSVFile* CSV_Load(const char* filename) {
 
         ret->line_count = lines;
         ret->cell_count = lines * ret->column_count;
-        ASSERT(cells.size() == ret->cell_count);
+        if (cells.size() != ret->cell_count) {
+                DEBUG("Cell count mismatch: cell_size(%u) != cell_count(%u)", cells.size(), ret->cell_count);
+                goto PARSE_ERROR;
+        }
         ret->cells = (uint32_t*)malloc(ret->cell_count * sizeof(uint32_t));
         ASSERT(ret->cells != NULL);
         memcpy(ret->cells, &cells[0], ret->cell_count * sizeof(uint32_t));

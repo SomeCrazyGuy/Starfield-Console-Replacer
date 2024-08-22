@@ -427,7 +427,7 @@ static void ConfigWriteEscapedString(const char *in_unescaped_string) {
                 else if (*in == '!') {
                         str = ('\\' | ('e' << 8));
                 }
-                else if (*in == '\"') {
+                else if (*in == '"') {
                         str = ('\\' | ('"' << 8));
                 }
                 else {

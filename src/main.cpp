@@ -339,6 +339,8 @@ static void Callback_Config(ConfigAction action) {
         if (action == ConfigAction_Write) {
                 HotkeySaveSettings();
         }
+
+        ImGui::GetIO().FontGlobalScale = s->FontScaleOverride / 100.0f;
 }
 
 
@@ -554,7 +556,7 @@ static LRESULT FAKE_Wndproc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 if (wParam == VK_F2) {
                         const auto Parser = GetParserAPI();
                         float f = 0;
-                        Parser->ParseFloat(" \t \r \n \v  +1.67e-4", &f);
+                        Parser->ParseFloat(" \t \r \n \v  +1.67e-4 \n \r \t \v", &f);
                         DEBUG("f: %f", f);
                 }
         }
@@ -576,10 +578,7 @@ static void OnHotheyActivate(uintptr_t) {
         DEBUG("ui toggled");
 
         if (setting_pause_on_ui_open) {
-                const auto Hook = GameHook_GetData()->GetGamePausedFlag();
-                if (Hook) {
-                        *Hook = should_show_ui;
-                }
+                GetGameHookAPI()->SetGamePaused(should_show_ui);
         }
 
         if (!should_show_ui) {

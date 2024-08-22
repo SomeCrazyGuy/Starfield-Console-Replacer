@@ -27,6 +27,17 @@ static inline double powerd(double x, int64_t y) {
         }
 }
 
+static inline const char* skip_whitespace(const char* str) {
+        while (
+                (*str == ' ') ||
+                (*str == '\r') ||
+                (*str == '\n') ||
+                (*str == '\t')
+                ) ++str;
+        return str;
+}
+
+
 enum NumberParseFlags : unsigned {
         NumberParseFlags_None = 0,
         NumberParseFlags_Float = 1 << 0,
@@ -38,20 +49,9 @@ static bool ParseNumber(const char* str, void* out_val, unsigned flags) {
         if (!str) return false;
         if (!out_val) return false;
 
-        while (*str <= ' ') {
-                if (
-                        (*str == ' ') ||
-                        (*str == '\t') ||
-                        (*str == '\r') ||
-                        (*str == '\n') ||
-                        (*str == '\v')
-                ) {
-                        ++str;
-                        continue;
-                }
 
-                return false;
-        }
+        str = skip_whitespace(str);
+        if (*str < ' ') return false;
 
         const bool is_unsigned = flags & NumberParseFlags_Unsigned;
         const bool is_float = flags & NumberParseFlags_Float;
@@ -105,19 +105,11 @@ static bool ParseNumber(const char* str, void* out_val, unsigned flags) {
                                 frac_len = 0;
                                 continue;
                         }
-                        else if (
-                                (c == ' ')  ||
-                                (c == '\t') ||
-                                (c == '\r') ||
-                                (c == '\n') ||
-                                (c == '\v')
-                                ) {
-                                // break on whitespace
-                                break;
-                        } else {
-                                // should we error here?
-                                // maybe only if no characters were parsed?
+                        else if (start == str) {
+                                //no numbers or empty string
                                 goto INVALID_CHARACTER;
+                        } else {
+                                break; //no more characters
                         }
                 }
 
@@ -165,7 +157,7 @@ static bool ParseNumber(const char* str, void* out_val, unsigned flags) {
 
         if (is_unsigned) {
                 *(uint64_t*)out_val = num[CT_Integer];
-                DEBUG("Parse '%s' as U64: %llu", start, num[CT_Integer]);
+                //DEBUG("Parse '%s' as U64: %llu", start, num[CT_Integer]);
         }
         else if (is_float) {
                 double dval = (double)num[CT_Fraction];
@@ -175,11 +167,11 @@ static bool ParseNumber(const char* str, void* out_val, unsigned flags) {
                 dval += num[CT_Integer];
                 dval *= powerd(10, exponent);
                 *(double*)out_val = dval;
-                DEBUG("Parse '%s' as Double: %f", start, dval);
+                //DEBUG("Parse '%s' as Double: %f", start, dval);
         }
         else {
                 *(int64_t*)out_val = num[CT_Integer] * (is_negative) ? -1 : 1;
-                DEBUG("Parse '%s' as I64: %lld", start, num[CT_Integer]);
+                //DEBUG("Parse '%s' as I64: %lld", start, num[CT_Integer]);
         }
         return true;
 
@@ -296,6 +288,55 @@ static bool ParseFloat(const char* str, float* out_val) {
 }
 
 
+static bool ParseBool(const char* str, bool* out) {
+        str = skip_whitespace(str);
+        if (*str == '0') {
+                *out = false;
+        }
+        else if (*str == '1') {
+                *out = true;
+        }
+        else {
+                return false;
+        }
+        return true;
+}
+
+
+static bool ParseStringCSV(const char* str, char* out, uint32_t out_size) {
+        out[0] = '\0';
+
+        const bool in_quotes = (*str == '"');
+        if (in_quotes) ++str;
+
+        int pos = 0;
+        while (pos < out_size) {
+                out[pos] = '\0';
+
+                if (!*str) break;
+
+                if (*str == '"') {
+                        if (in_quotes) {
+                                ++str;
+                                if (*str != '"') {
+                                        break;
+                                }
+                        }
+                        else {
+                                //parse error: can't have quotes without being in quotes
+                                return false;
+                        }
+                }
+
+                out[pos] = *str;
+                ++str;
+                ++pos;
+        }
+
+        return true;
+}
+
+
 extern const struct parse_api_t* GetParserAPI() {
         static const struct parse_api_t api = {
                 ParseU64,
@@ -308,6 +349,8 @@ extern const struct parse_api_t* GetParserAPI() {
                 ParseS8,
                 ParseDouble,
                 ParseFloat,
+                ParseBool,
+                ParseStringCSV
         };
         return &api;
 }

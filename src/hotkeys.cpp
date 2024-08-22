@@ -17,7 +17,6 @@
 static const auto Config = GetConfigAPI();
 
 
-// if this is only data, why is it in the callback api?
 struct HotKey {
         unsigned owner; // handle to mod that owns hotkey
         unsigned set_key; //the key combo that this hotkey is set to
@@ -79,7 +78,7 @@ static const char* GetHotkeyText(char* tmp_buffer, unsigned tmp_size, uint16_t h
 
 
 // its possible that several mods will all add several hotkeys at once,
-// so we add them to the array now and do the heavy lifting later
+// so we add them to the array now and set a dirty flag to rebuild the cache
 extern void HotkeyRequestNewHotkey(RegistrationHandle owner, const char* name, uintptr_t userdata, unsigned forced_hotkey) {
         HotKey hotkey{};
         hotkey.owner = owner;

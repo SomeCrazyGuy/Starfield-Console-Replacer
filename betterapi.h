@@ -38,7 +38,7 @@
 //    16) Graphics API
 //    17) LogBuffer API
 //    18) C Library API
-//    19) Game Console API
+//    19) Game Hooks API
 //    20) Wrapped Windows API
 //    21) CSV file API
 //    22) String Parser API
@@ -1007,7 +1007,7 @@ struct std_api_t {
 
 
 ///////////////////////////////////////////////////////////////////////////////
-//                 19) Game Console API
+//                 19) Game Hooks API
 ///////////////////////////////////////////////////////////////////////////////
 
 struct gamehook_api_t {
@@ -1015,31 +1015,46 @@ struct gamehook_api_t {
         // max length of `command` is limited to 512 bytes by the game
         // NOTE: the game wont run console commands until the main menu
         //       has finished loading otherwise it freezes waiting
-        //       for the console to be ready (if your compiling shaders
-        //       the game could seem frozen for several minutes)
-        // there should be a way to know when the console is ready, but
-        // as I dont link with sfse, addresslibrary, commonlibsf or anything
-        // I have to figure it out myself. Maybe see when startingconsolecommand
-        // is run?
-        
-        // Version 1.4.1 - copy command to internal buffer to take const char*
-        //                 and string literals, not API breaking for old plugins
-        //                 running on newer betterconsole
-        void (*RunCommand)(const char* command);
+        //       for the console to be ready
+        // use the IsConsoleReady function to check if the console is ready
+        // to accept commands.
+        void (*ConsoleRun)(const char* command);
 
-#if BETTERAPI_DEVELOPMENT_FEATURES
-        // get a pointer to a form using a string identifier
-        // using this scheme: https://falloutck.uesp.net/wiki/Template:INI:Papyrus:sTraceStatusOfQuest
-        // this function pointer could be NULL if the hook was not created
+        // print `message` to the in-game console
+        // this will also print to the console history file that betterconsole makes
+        // max length of `message` is limited to about 4000 bytes by the game
+        // if the console print game hook fails, this will still print to the logfile
+        void (*ConsolePrint)(const char* message);
+
+        // returns true if the console is ready
+        // if the console is not ready, you should not run commands
+        // if the hook fails, this function will always return false
+        // a manual override will be put in the settings ui in the future
+        bool (*IsConsoleReady)(void);
+
+        // sets the game paused state to `paused`
+        // if `paused` is true, the game will be paused
+        // if `paused` is false, the game will be unpaused
+        // if the hooks fails, this function will do nothing
+        void (*SetGamePaused)(bool paused);
+
+        // returns true if the game is paused
+        // if the hook fails, this function will always return false
+        bool (*IsGamePaused)(void);
+
+        // get a pointer to the form with `form_identifier`
+        // the argument to this function is a string identifier of the form:
+        // https://falloutck.uesp.net/wiki/Template:INI:Papyrus:sTraceStatusOfQuest
+        // if the hook fails, this function will return NULL
         void* (*GetFormByID)(const char* form_identifier);
 
-        // get the name or editor id of a form
-        // this function pointer could be NULL if the hook not created
+        // get the name of the form
+        // if the hook fails, this function will return NULL
         const char* (*GetFormName)(void* form);
 
-        // get the game paused flag, returns NULL if not supported
-        bool* (*GetGamePausedFlag)();
-#endif
+        // Retrieve the console output logbuffer
+        // if the hook fails, this function will return 0
+        LogBufferHandle (*GetConsoleOutputHandle)(void);
 };
 
 
@@ -1053,7 +1068,7 @@ struct gamehook_api_t {
 // internally there is extensive error checking, assertions, and debug logging
 // All string parameters are assumed to be utf-8 and functions taking string arguments
 // are appended with "UTF" to avoid conflict with the macros defined by the windows header
-// I/O is no wrapped by this API.
+// I/O is not wrapped by this API.
 struct windows_api_t {
         // returns false on error
         // VirtualProtect - see https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect
@@ -1192,6 +1207,23 @@ struct parse_api_t {
         // `str` is the string to parse
         // `out_float` receives the parsed value
         bool (*ParseFloat)(const char* str, float* out_float);
+
+
+        // parse a utf-8 string as a bool
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out` receives the parsed value
+        bool (*ParseBool)(const char* str, bool* out);
+
+
+        // parse a a string from a csv file to a buffer
+        // returns false on parse error
+        // `str` is the string to parse
+        // `out_str` receives the null-terminated utf-8 string
+        // `out_size` is the size of `out_str`
+        // NOTE: `out_str` will always be null-terminated
+        // NOTE2: if `out_str` is not big enough, this function will still return true
+        bool (*ParseStringCSV)(const char* str, char* out, uint32_t out_size);
 };
 
 
@@ -1213,7 +1245,7 @@ typedef struct better_api_t {
         const struct callback_api_t* Callback;
         const struct config_api_t* Config;
         const struct std_api_t* Stdlib;
-        const struct gamehook_api_t* Game;
+        const struct gamehook_api_t* GameHook;
         const struct windows_api_t* Windows;
         const struct csv_api_t* CSV;
         const struct parse_api_t* Parse;

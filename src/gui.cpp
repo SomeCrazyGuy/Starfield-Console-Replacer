@@ -8,20 +8,24 @@ static const auto UI = GetSimpleDrawAPI();
 extern void draw_gui() {
         static bool once = false;
         if (!once) {
+                once = true;
                 const auto screen = ImGui::GetIO().DisplaySize;
                 ImGui::SetNextWindowPos(ImVec2{ screen.x / 4, screen.y / 4 });
                 ImGui::SetNextWindowSize(ImVec2{ screen.x / 2 , screen.y / 2 });
-                once = true;
+                if (GetSettings()->FontScaleOverride == 0) {
+                        GetSettingsMutable()->FontScaleOverride = 100;
+                }
+                ImGui::GetIO().FontGlobalScale = GetSettings()->FontScaleOverride / 100.0f;
         }
 
         auto imgui_context = ImGui::GetCurrentContext();
         ImGui::Begin("BetterConsole");
         ImGui::BeginTabBar("mod tabs", ImGuiTabBarFlags_FittingPolicyScroll | ImGuiTabBarFlags_Reorderable | ImGuiTabBarFlags_AutoSelectNewTabs);
 
-        if (GetSettings()->FontScaleOverride == 0) {
-                GetSettingsMutable()->FontScaleOverride = 100;
-        }
-        ImGui::SetWindowFontScale((float) GetSettings()->FontScaleOverride / 100.f);
+
+        
+
+        //ImGui::ShowDemoWindow();
 
         //TODO: the internal modmenu tab could be part of the internal plugin
         //      and thus called by the tab callback iteration routine like any other plugin

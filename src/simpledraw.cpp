@@ -34,16 +34,11 @@ static bool simple_input_text(const char* name, char* buffer, uint32_t buffer_si
 //NOTE: this uses em size which is roughly font size + imgui padding and border size
 //      (min_size_em * font_size) + padding + border
 static void simple_hbox_left(float split, float min_size_em) {
-        auto size = ImGui::GetContentRegionAvail();
-        auto w = size.x * split;
-
+        const auto size = ImGui::GetContentRegionAvail();
         const float min_size = (ImGui::GetFontSize() * min_size_em);
 
+        auto w = size.x * split;
         w = (w < min_size) ? min_size : w;
-
-        // weird code, i use the width available as the unique id 
-        // because nested hboxes will only reduce available width and thus be unique
-        ImGui::PushID((int)(size.x));
         ImGui::BeginChild("##hbox left", ImVec2{ w, size.y }, true);
 }
 
@@ -57,7 +52,6 @@ static void simple_hbox_right() {
 
 static void simple_hbox_end() {
         ImGui::EndChild();
-        ImGui::PopID();
 }
 
 
@@ -68,7 +62,6 @@ static void simple_vbox_top(float split, float min_size_em) {
 
         const auto min_size = (ImGui::GetTextLineHeightWithSpacing() * min_size_em);
         h = (h < min_size) ? min_size : h;
-        ImGui::PushID((int)(size.y));
         ImGui::BeginChild("##vbox top", ImVec2{ size.x, h }, true);
 }
 
@@ -81,7 +74,6 @@ static void simple_vbox_bottom() {
 
 static void simple_vbox_end() {
         ImGui::EndChild();
-        ImGui::PopID();
 }
 
 
@@ -160,10 +152,13 @@ static bool simple_selection_list(uint32_t* selection, const void* userdata, uin
 
 
 static void simple_draw_table(const char * const * const headers, uint32_t header_count, uintptr_t rows_userdata, uint32_t row_count, CALLBACK_TABLE draw_cell) {
-        if (ImGui::BeginTable("SimpleDrawTable", header_count, ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable)) {
+        if (ImGui::BeginTable("SimpleDrawTable", header_count, ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
+                ImGui::PushID("TableHeaders");
                 for (uint32_t i = 0; i < header_count; ++i) {
                         ImGui::TableSetupColumn(headers[i]);
                 }
+                ImGui::PopID();
+                ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableHeadersRow();
 
                 ImGuiListClipper clip;

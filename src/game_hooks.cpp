@@ -5,56 +5,87 @@
 #include <stdio.h>
 
 static const auto HookAPI = GetHookAPI();
-
-static void (*Game_ConsoleRun)(void* consolemgr, char* cmd) = nullptr;
-static void(*Game_ConsolePrintV)(void* consolemgr, const char* fmt, va_list args) = nullptr;
-static void(*Game_StartingConsoleCommand)(void* A, uint32_t* type) = nullptr;
-static unsigned char* is_game_paused_address = nullptr;
-
 static const auto LogBuffer = GetLogBufferAPI();
 
-static struct gamehook_api_t  GameHookAPI = {};
+static LogBufferHandle ConsoleInput = 0;
+static LogBufferHandle ConsoleOutput = 0;
 
-static GameHookData HookData{};
+static void* ConsoleManager = nullptr;
+static unsigned char* is_game_paused_address = nullptr;
+static bool is_console_ready = false;
 
-extern const GameHookData* GameHook_GetData(void) {
-        return &HookData;
+static void (*Game_ConsolePrint)(void* consolemgr, const char* message) = nullptr;
+static void (*Game_ConsoleRun)(void* consolemgr, char* cmd) = nullptr;
+static void (*Game_StartingConsoleCommand)(void* A, uint32_t* type) = nullptr;
+static void* (*Game_GetFormByID)(const char* identifier) = nullptr;
+static const char* (*Game_GetFormName)(void* form) = nullptr;
+
+
+
+
+extern LogBufferHandle GameHook_GetConsoleInputHandle() {
+        if (!ConsoleInput) {
+                ConsoleInput = LogBuffer->Restore("ConsoleInput", "BetterConsoleInput.txt");
+        }
+        return ConsoleInput;
+}
+
+extern LogBufferHandle GameHook_GetConsoleOutputHandle() {
+        if (!ConsoleOutput) {
+                ConsoleOutput = LogBuffer->Create("ConsoleOutput", "BetterConsoleOutput.txt");
+        }
+        return ConsoleOutput;
 }
 
 
 static void HookedConsoleRun(void* consolemgr, char* cmd) {
-        if (HookData.ConsoleReadyFlag && !*HookData.ConsoleReadyFlag) {
+        if (!is_console_ready) {
                 DEBUG("StartingConsoleCommand was not called, not ready for console command '%s'", cmd);
         }
-
-        Game_ConsoleRun(consolemgr, cmd);
         
-        if (!HookData.ConsoleInput) {
+        if (!ConsoleInput) {
                 DEBUG("ConsoleInput logbuffer not ready when running command: '%s'", cmd);
                 return;
         }
-        LogBuffer->Append(HookData.ConsoleInput, cmd);
+        LogBuffer->Append(ConsoleInput, cmd);
+        
+        if (Game_ConsoleRun) {
+                Game_ConsoleRun(consolemgr, cmd);
+        }
+        else {
+                DEBUG("Game_ConsoleRun was null when running command: '%s'", cmd);
+        }
 }
 
 
-static void HookedConsolePrintV(void* consolemgr, const char* fmt, va_list args) {
-        Game_ConsolePrintV(consolemgr, fmt, args);
-
-        if (!HookData.ConsoleOutput) {
-                DEBUG("ConsoleOutput logbuffer not ready");
-                return;
+static void HookedConsolePrint(void* consolemgr, const char* message) {
+        if (!ConsoleManager) {
+                ConsoleManager = consolemgr;
         }
 
-        char buffer[4096];
-        vsnprintf(buffer, sizeof(buffer), fmt, args);
-        LogBuffer->Append(HookData.ConsoleOutput, buffer);
+        if (!ConsoleOutput) {
+                DEBUG("ConsoleInput logbuffer not ready when printing '%s'", message);
+                return;
+        }
+        else {
+                LogBuffer->Append(ConsoleOutput, message);
+        }
+
+        if (consolemgr) {
+                if (Game_ConsolePrint) {
+                        Game_ConsolePrint(consolemgr, message);
+                }
+                else {
+                        DEBUG("Game_ConsolePrint was null when printing '%s'", message);
+                }
+        }
+        else {
+                DEBUG("consolemgr was null when printing '%s'", message);
+        }
 }
 
-
 static void HookedStartingConsoleCommand(void* A, uint32_t* type) {
-        static bool ready = false;
-        HookData.ConsoleReadyFlag = &ready;
-        if (*type == 5) ready = true;
+        if (*type == 5) is_console_ready = true;
         Game_StartingConsoleCommand(A, type);
 }
 
@@ -63,6 +94,11 @@ static void ConsoleRun(const char* cmd) {
         char command[512];
         strncpy_s(command, sizeof(command), cmd, sizeof(command));
         HookedConsoleRun(NULL, command);
+}
+
+
+static void ConsolePrint(const char* message) {
+        HookedConsolePrint(ConsoleManager, message);
 }
 
 
@@ -88,10 +124,39 @@ static bool* GetGamePausedFlag() {
         return flag_ptr;
 }
 
+
+static bool IsGamePaused() {
+        if (!GetGamePausedFlag()) return false;
+        return *GetGamePausedFlag();
+}
+
+
+static void SetGamePaused(bool paused) {
+        if (!GetGamePausedFlag()) return;
+        *GetGamePausedFlag() = paused;
+}
+
+
+static void* GetFormByID(const char* identifier) {
+        if (!Game_GetFormByID) return nullptr;
+        return Game_GetFormByID(identifier);
+}
+
+
+static const char* GetFormName(void* form) {
+        if (!Game_GetFormName) return nullptr;
+        return Game_GetFormName(form);
+}
+
+
+static bool IsConsoleReady() {
+        return is_console_ready;
+}
+
+
 extern void GameHook_Init() {
-        char path_tmp[260];
-        HookData.ConsoleInput = LogBuffer->Restore("ConsoleInput", GetPathInDllDir(path_tmp, "BetterConsoleInput.txt"));
-        HookData.ConsoleOutput = LogBuffer->Create("ConsoleOutput", GetPathInDllDir(path_tmp, "BetterConsoleOutput.txt"));
+        //char path_tmp[260];
+        
 
         DEBUG("Hooking ExecuteCommand");
         auto OldConsoleRun = (FUNC_PTR) HookAPI->AOBScanEXE(
@@ -116,30 +181,31 @@ extern void GameHook_Init() {
                         OldConsoleRun,
                         (FUNC_PTR)HookedConsoleRun
                 );
-                HookData.ConsoleRun = &ConsoleRun;
         }
-        
+
 
         DEBUG("Hooking ConsolePrint");
         auto OldConsolePrintV = (FUNC_PTR) HookAPI->AOBScanEXE(
-                "48 89 5c 24 ?? " // MOV QWORD PTR [RSP+0x??], RBX
-                "48 89 6c 24 ?? " // MOV QWORD PTR [RSP+0x??], RBP
-                "48 89 74 24 ?? " // MOV QWORD PTR [RSP+0x??], RSI
-                "57 "             // PUSH RDI
-                "b8 30 10 00 00 " // MOV EAX, 0x1030
-                "e8 ?? ?? ?? ?? " // CALL ?? ?? ?? ??
-                "48 2b e0 "       // SUB RSP, RAX
-                "49 8b f8 "       // MOV RDI, R8
+                "48 85 D2 "                //TEST   RDX, RDX
+                "0F 84 ?? ?? 00 00 "       //JE     0X0000????
+                "48 89 5C 24 ?? "          //MOV    QWORD PTR[RSP + 0X??], RBX
+                "55 "                      //PUSH   RBP
+                "56 "                      //PUSH   RSI
+                "57 "                      //PUSH   RDI
+                "41 56 "                   //PUSH   R14
+                "41 57 "                   //PUSH   R15
+                "48 8B EC "                //MOV    RBP, RSP
+                "48 83 EC ?? "             //SUB    RSP, 0X??
+                "4C 8B FA"                 //MOV    R15, RDX
         );
         if (!OldConsolePrintV) {
                 DEBUG("Failed to find ConsolePrint");
         }
         else {
-                Game_ConsolePrintV = (decltype(Game_ConsolePrintV))HookAPI->HookFunction(
+                Game_ConsolePrint = (decltype(Game_ConsolePrint))HookAPI->HookFunction(
                         OldConsolePrintV,
-                        (FUNC_PTR)HookedConsolePrintV
+                        (FUNC_PTR)HookedConsolePrint
                 );
-                HookData.ConsoleOutputHooked = true;
         }
 
 
@@ -152,6 +218,9 @@ extern void GameHook_Init() {
                 "b0 01 "                // MOV AL,0x1
                 "C3"                    // RET
         );
+        if (!is_game_paused_address) {
+                DEBUG("Failed to find is_game_paused");
+        }
 
         DEBUG("Hooking OnStartingConsoleCommand");
         auto OldStartingConsoleCommand = (FUNC_PTR)HookAPI->AOBScanEXE(
@@ -173,10 +242,8 @@ extern void GameHook_Init() {
                 );
         } 
 
-        HookData.GetGamePausedFlag = &GetGamePausedFlag;
-
         DEBUG("Hooking GetFormByID");
-        HookData.GetFormByID = (decltype(HookData.GetFormByID))GetHookAPI()->AOBScanEXE(
+        Game_GetFormByID = (decltype(Game_GetFormByID))GetHookAPI()->AOBScanEXE(
                 "88 54 24 ?? "    // MOV BYTE PTR [RSP+0x??],DL
                 "55 "             // PUSH RBP
                 "53 "             // PUSH RBX
@@ -188,32 +255,34 @@ extern void GameHook_Init() {
                 "33 f6 "          // XOR ESI,ESI
                 "48 85 c9 "       // TEST RCX,RCX
         );
-
-        if (!HookData.GetFormByID) {
+        if (!Game_GetFormByID) {
                 DEBUG("Failed to find GetFormByID");
         }
 
 
         DEBUG("Hooking GetFormName");
-        HookData.GetFormName = (decltype(HookData.GetFormName))GetHookAPI()->AOBScanEXE(
+        Game_GetFormName = (decltype(Game_GetFormName))GetHookAPI()->AOBScanEXE(
                 "48 89 4c 24 ?? " // MOV QWORD PTR [RSP+0x??], RCX
                 "53 "             // PUSH RBX
                 "48 83 EC ?? "    // SUB RSP, 0x??
                 "48 8D 1D ?? ?? ?? ?? " // LEA RBX, QWORD PTR [rip+0x???]
                 "48 85 C9 "       // TEST RCX, RCX
         );
-        if (!HookData.GetFormName) {
+        if (!Game_GetFormName) {
                 DEBUG("Failed to find GetFormName");
         }
-
-        GameHookAPI = decltype(GameHookAPI) {
-                HookData.ConsoleRun,
-                HookData.GetFormByID,
-                HookData.GetFormName,
-                HookData.GetGamePausedFlag
-        };
 }
 
 BC_EXPORT const struct gamehook_api_t* GetGameHookAPI() {
+        static constexpr const struct gamehook_api_t GameHookAPI = {
+                ConsoleRun,
+                ConsolePrint,
+                IsConsoleReady,
+                SetGamePaused,
+                IsGamePaused,
+                GetFormByID,
+                GetFormName,
+                GameHook_GetConsoleOutputHandle,
+        };
         return &GameHookAPI;
 }

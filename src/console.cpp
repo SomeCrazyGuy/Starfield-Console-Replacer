@@ -26,8 +26,10 @@ static const hook_api_t* HookAPI = nullptr;
 static const log_buffer_api_t* LogBuffer = nullptr;
 static const simple_draw_t* SimpleDraw = nullptr;
 static const config_api_t* Config = nullptr;
-static const auto GameHook = GameHook_GetData();
+static const gamehook_api_t* GameHook = nullptr;
 
+static LogBufferHandle ConsoleInput = 0;
+static LogBufferHandle ConsoleOutput = 0;
 static char IOBuffer[256 * 1024];
 static std::vector<uint32_t> SearchOutputLines{};
 static std::vector<uint32_t> SearchHistoryLines{};
@@ -42,65 +44,21 @@ struct Command {
 
 
 static void draw_console_window(void*) {
-        if (!(GameHook->ConsoleRun && GameHook->ConsoleOutputHooked)) {
-                if (!GameHook->ConsoleOutputHooked) {
-                        SimpleDraw->Text("Cannot hook console print function.");
-                }
-
-                if (!GameHook->ConsoleRun) {
-                        SimpleDraw->Text("Cannot hook console run function.");
-                }
-
-                SimpleDraw->Text("Incompatible mod loaded or incompatible game version");
-                SimpleDraw->Text("BetterConsole '%s' is compatible with game version '%s'", BETTERCONSOLE_VERSION, COMPATIBLE_GAME_VERSION);
-                return;
-        }
-
-
-        static bool ConsoleReadyIgnored = false;
-        if (!GameHook->ConsoleReadyFlag && !ConsoleReadyIgnored) {
-                SimpleDraw->Text("Cannot detect if the console is ready. Proceed anyway?");
-                if (SimpleDraw->Button("Ignore and continue")) {
-                        ConsoleReadyIgnored = true;
-                }
-                return;
-        }
-
-
-        static bool GamePausedIgnored = false;
-        if (!GameHook->GetGamePausedFlag() && !GamePausedIgnored) {
-                SimpleDraw->Text("Cannot detect if the game is paused. Proceed anyway?");
-                if (SimpleDraw->Button("Ignore and continue")) {
-                        GamePausedIgnored = true;
-                }
-                return;
-        }
-
-
-        if(GameHook->ConsoleReadyFlag && !*GameHook->ConsoleReadyFlag) {
+        if(!GameHook->IsConsoleReady()) {
                 SimpleDraw->Text("Waiting for console to become ready...");
                 return;
         }
 
-
-        if (GamePausedIgnored) {
-                if (SimpleDraw->Button("Toggle Game Pause")) {
-                        GameHook->ConsoleRun("ToggleGamePause");
-                }
-        }
-        else {
-                bool* flag = GameHook->GetGamePausedFlag();
-                const char* const GamePauseText = *flag ? "Resume Game" : "Pause Game";
-                if (SimpleDraw->Button(GamePauseText)) {
-                        *flag = !*flag;
-                }
+        const char* const GamePauseText = GameHook->IsGamePaused()? "Resume Game" : "Pause Game";
+        if (SimpleDraw->Button(GamePauseText)) {
+                GameHook->SetGamePaused(!GameHook->IsGamePaused());
         }
         ImGui::SameLine();
         
         ImGui::SetNextItemWidth(-(ImGui::GetFontSize() * 12.0f));
 
         static uint32_t line_count = 0;
-        const auto cur_lines = LogBuffer->GetLineCount(GameHook->ConsoleOutput);
+        const auto cur_lines = LogBuffer->GetLineCount(ConsoleOutput);
         if (line_count != cur_lines) {
                 line_count = cur_lines;
                 UpdateScroll = true;
@@ -113,47 +71,47 @@ static void draw_console_window(void*) {
 
         if (CommandMode == InputMode::Command) {
                 if (ImGui::InputText("Command Mode  ", IOBuffer, sizeof(IOBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_cmdline)) {
-                        HistoryIndex = LogBuffer->GetLineCount(GameHook->ConsoleInput);
+                        HistoryIndex = LogBuffer->GetLineCount(ConsoleInput);
                         GameHook->ConsoleRun(IOBuffer);
                         IOBuffer[0] = 0;
                         UpdateFocus = true;
                 }
                 SimpleDraw->SameLine();
                 if (SimpleDraw->Button("Clear")) {
-                        LogBuffer->Clear(GameHook->ConsoleOutput);
+                        LogBuffer->Clear(ConsoleOutput);
                 }
-                SimpleDraw->ShowLogBuffer(GameHook->ConsoleOutput, UpdateScroll);
+                SimpleDraw->ShowLogBuffer(ConsoleOutput, UpdateScroll);
                 
         }
         else if (CommandMode == InputMode::SearchOutput) {
                 if (ImGui::InputText("Search Output ", IOBuffer, sizeof(IOBuffer), ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_switch_mode)) {
                         SearchOutputLines.clear();
-                        for (uint32_t i = 0; i < LogBuffer->GetLineCount(GameHook->ConsoleOutput); ++i) {
-                                if (strcasestr(LogBuffer->GetLine(GameHook->ConsoleOutput, i), IOBuffer)) {
+                        for (uint32_t i = 0; i < LogBuffer->GetLineCount(ConsoleOutput); ++i) {
+                                if (strcasestr(LogBuffer->GetLine(ConsoleOutput, i), IOBuffer)) {
                                         SearchOutputLines.push_back(i);
                                 }
                         }
                 }
                 SimpleDraw->SameLine();
                 if (SimpleDraw->Button("Clear")) {
-                        LogBuffer->Clear(GameHook->ConsoleOutput);
+                        LogBuffer->Clear(ConsoleOutput);
                 }
-                SimpleDraw->ShowFilteredLogBuffer(GameHook->ConsoleOutput, SearchOutputLines.data(), (uint32_t)SearchOutputLines.size(), UpdateScroll);
+                SimpleDraw->ShowFilteredLogBuffer(ConsoleOutput, SearchOutputLines.data(), (uint32_t)SearchOutputLines.size(), UpdateScroll);
         }
         else if (CommandMode == InputMode::SearchHistory) {
                 if (ImGui::InputText("Search History", IOBuffer, sizeof(IOBuffer), ImGuiInputTextFlags_CallbackCompletion, CALLBACK_inputtext_switch_mode)) {
                         SearchHistoryLines.clear();
-                        for (uint32_t i = 0; i < LogBuffer->GetLineCount(GameHook->ConsoleInput); ++i) {
-                                if (strcasestr(LogBuffer->GetLine(GameHook->ConsoleInput, i), IOBuffer)) {
+                        for (uint32_t i = 0; i < LogBuffer->GetLineCount(ConsoleInput); ++i) {
+                                if (strcasestr(LogBuffer->GetLine(ConsoleInput, i), IOBuffer)) {
                                         SearchHistoryLines.push_back(i);
                                 }
                         }
                 }
                 SimpleDraw->SameLine();
                 if (SimpleDraw->Button("Clear")) {
-                        LogBuffer->Clear(GameHook->ConsoleInput);
+                        LogBuffer->Clear(ConsoleInput);
                 }
-                SimpleDraw->ShowFilteredLogBuffer(GameHook->ConsoleInput, SearchHistoryLines.data(), (uint32_t)SearchHistoryLines.size(), UpdateScroll);
+                SimpleDraw->ShowFilteredLogBuffer(ConsoleInput, SearchHistoryLines.data(), (uint32_t)SearchHistoryLines.size(), UpdateScroll);
         }
         else {
                 ASSERT(false && "Invalid command mode");
@@ -168,7 +126,7 @@ static void draw_console_window(void*) {
 
 static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data) {
         if (data->EventFlag == ImGuiInputTextFlags_CallbackHistory) {
-                const auto HistoryMax = (int)LogBuffer->GetLineCount(GameHook->ConsoleInput);
+                const auto HistoryMax = (int)LogBuffer->GetLineCount(ConsoleInput);
 
                 if (data->EventKey == ImGuiKey_UpArrow) {
                         --HistoryIndex;
@@ -187,7 +145,7 @@ static int CALLBACK_inputtext_cmdline(ImGuiInputTextCallbackData* data) {
 
                 if (HistoryMax) {
                         data->DeleteChars(0, data->BufTextLen);
-                        data->InsertChars(0, LogBuffer->GetLine(GameHook->ConsoleInput, HistoryIndex));
+                        data->InsertChars(0, LogBuffer->GetLine(ConsoleInput, HistoryIndex));
                 }
         }
         else if (data->EventFlag == ImGuiInputTextFlags_CallbackCompletion) {
@@ -279,6 +237,10 @@ extern void setup_console(const BetterAPI* api) {
         HookAPI = API->Hook;
         SimpleDraw = API->SimpleDraw;
         Config = API->Config;
+        GameHook = API->GameHook;
+
+        ConsoleInput = GameHook_GetConsoleInputHandle();
+        ConsoleOutput = GameHook->GetConsoleOutputHandle();
         
         IOBuffer[0] = 0;
 }

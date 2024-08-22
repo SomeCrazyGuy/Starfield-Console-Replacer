@@ -21,7 +21,7 @@
 #include "../imgui/imgui.h"
 
 
-#define BETTERCONSOLE_VERSION "1.4.2"
+#define BETTERCONSOLE_VERSION "1.4.3"
 #define COMPATIBLE_GAME_VERSION "1.12.36"
 
 constexpr uint32_t GAME_VERSION = BC_MAKE_VERSION(1, 12, 36);
