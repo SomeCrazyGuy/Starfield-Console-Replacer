@@ -1,4 +1,18 @@
 #include "main.h"
+auto OldConsoleRun = (FUNC_PTR) HookAPI->AOBScanEXE(
+    "48 8b c4 "      // MOV RAX, RSP
+    "48 89 50 ?? "   // MOV QWORD PTR [RAX+0x??], RDX
+    "4c 89 40 ?? "   // MOV QWORD PTR [RAX+0x??], R8
+    "4c 89 48 ?? "   // MOV QWORD PTR [RAX+0x??], R9
+    "55 "            // PUSH RBP
+    "53 "            // PUSH RBX
+    "56 "            // PUSH RSI
+    "57 "            // PUSH RDI
+    "41 55 "         // PUSH R13
+    "41 56 "         // PUSH R14
+    "41 57 "         // PUSH R15
+    "48 8d"          // LEA <clipped>
+);
 #include "hook_api.h"
 #include "game_hooks.h"
 
